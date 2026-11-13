@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "Repository layout",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "diagrams/layout.en.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "peano-minimal/",
+      "sublabel": "FD4 + RK · CCZ4 gauge wave"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "the simulation",
+      "parent": "root"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "steps 1a, 1b, 2",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "step 3: data processing",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "check one run",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "order over three grids",
+      "parent": "analysis"
+    },
+    {
+      "id": "code",
+      "label": "code/",
+      "sublabel": "1a + 1b: C++ and executable (generated)",
+      "parent": "example"
+    },
+    {
+      "id": "raw",
+      "label": "raw_data/",
+      "sublabel": "step 2: snapshots per grid (generated)",
+      "parent": "example"
+    },
+    {
+      "id": "data",
+      "label": "data/",
+      "sublabel": "step 3: CSV and plots per grid (generated)",
+      "parent": "example"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "framework source and Python API",
+      "parent": "root"
+    },
+    {
+      "id": "peano",
+      "label": "peano4/",
+      "sublabel": "grid, task graph, code generator",
+      "parent": "src"
+    },
+    {
+      "id": "tarch",
+      "label": "tarch/",
+      "sublabel": "logging, linear algebra, timing",
+      "parent": "src"
+    },
+    {
+      "id": "toolbox",
+      "label": "toolbox/",
+      "sublabel": "patch data and load balancing",
+      "parent": "src"
+    },
+    {
+      "id": "exa",
+      "label": "exahype2/",
+      "sublabel": "PDE framework; api/rkfd4",
+      "parent": "src"
+    },
+    {
+      "id": "gr",
+      "label": "exagrype/",
+      "sublabel": "CCZ4 and gauge wave initial data",
+      "parent": "src"
+    },
+    {
+      "id": "dast",
+      "label": "dastgen2/",
+      "sublabel": "data structure generator",
+      "parent": "src"
+    },
+    {
+      "id": "cmake",
+      "label": "CMakeLists.txt",
+      "sublabel": "step 0: builds the framework",
+      "parent": "root"
+    },
+    {
+      "id": "build",
+      "label": "build/",
+      "sublabel": "step 0 libraries (generated)",
+      "parent": "root"
+    },
+    {
+      "id": "req",
+      "label": "requirements.txt",
+      "sublabel": "Python dependencies",
+      "parent": "root"
+    },
+    {
+      "id": "license",
+      "label": "LICENSE",
+      "sublabel": "Peano license",
+      "parent": "root"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Yours and generated",
+      "items": [
+        "Yours: gauge-wave.py and the two scripts in analysis/.",
+        "Generated: build/, code/, raw_data/, data/, all listed in .gitignore and never uploaded to GitHub.",
+        "code/, raw_data/ and data/ are drawn at their default place, example/; with $GAUGE_WAVE_WORK_DIR set they go to that folder instead, which may be outside the repository."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Disposable and valuable",
+      "items": [
+        "build/ and code/ can be regenerated at any time; code/ is shared and emptied before each generation.",
+        "raw_data/ and data/ have one folder per grid (n9/, n27/, n81/): the valuable results."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Source",
+      "items": [
+        "Based on the peano-minimal README and the scripts in example/."
+      ]
+    }
+  ]
+}

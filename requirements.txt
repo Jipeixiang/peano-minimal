@@ -1,0 +1,9 @@
+# Python packages needed to generate, build and check the gauge wave example.
+# Tested with Python 3.12 and the versions in brackets.
+jinja2          # code generation templates          (3.1.6)
+numpy           # numerics in the API and check.py   (2.5.4)
+sympy           # symbolic kernels of the DSL        (1.14.0)
+ast-comments    # parser of the kernel DSL           (1.3.0)
+matplotlib      # plots in check.py                  (3.11.2)
+vtk             # imported by Peano's patch file reader (9.7.2)
+cmake>=3.21     # only needed if your system has no CMake 3.21+

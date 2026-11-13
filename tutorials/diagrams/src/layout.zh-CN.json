@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "仓库结构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "diagrams/layout.zh-CN.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "peano-minimal/",
+      "sublabel": "FD4 + RK · CCZ4 gauge wave"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "算例",
+      "parent": "root"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "第 1a、1b、2 步",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "第 3 步：处理数据的程序",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "检查一次运行",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "三种网格的收敛阶",
+      "parent": "analysis"
+    },
+    {
+      "id": "code",
+      "label": "code/",
+      "sublabel": "1a + 1b：C++ 和可执行文件（生成的）",
+      "parent": "example"
+    },
+    {
+      "id": "raw",
+      "label": "raw_data/",
+      "sublabel": "第 2 步：快照，按网格分（生成的）",
+      "parent": "example"
+    },
+    {
+      "id": "data",
+      "label": "data/",
+      "sublabel": "第 3 步：CSV 和图，按网格分（生成的）",
+      "parent": "example"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "框架源码与 Python API",
+      "parent": "root"
+    },
+    {
+      "id": "peano",
+      "label": "peano4/",
+      "sublabel": "网格、任务图、代码生成",
+      "parent": "src"
+    },
+    {
+      "id": "tarch",
+      "label": "tarch/",
+      "sublabel": "日志、线性代数、计时",
+      "parent": "src"
+    },
+    {
+      "id": "toolbox",
+      "label": "toolbox/",
+      "sublabel": "patch 数据与负载均衡",
+      "parent": "src"
+    },
+    {
+      "id": "exa",
+      "label": "exahype2/",
+      "sublabel": "PDE 框架；api/rkfd4",
+      "parent": "src"
+    },
+    {
+      "id": "gr",
+      "label": "exagrype/",
+      "sublabel": "CCZ4 方程与 gauge wave 初值",
+      "parent": "src"
+    },
+    {
+      "id": "dast",
+      "label": "dastgen2/",
+      "sublabel": "数据结构生成器",
+      "parent": "src"
+    },
+    {
+      "id": "cmake",
+      "label": "CMakeLists.txt",
+      "sublabel": "第 0 步：编译框架库",
+      "parent": "root"
+    },
+    {
+      "id": "build",
+      "label": "build/",
+      "sublabel": "第 0 步的框架库（生成的）",
+      "parent": "root"
+    },
+    {
+      "id": "req",
+      "label": "requirements.txt",
+      "sublabel": "Python 依赖",
+      "parent": "root"
+    },
+    {
+      "id": "license",
+      "label": "LICENSE",
+      "sublabel": "Peano 许可证",
+      "parent": "root"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "自己写的和生成的",
+      "items": [
+        "自己写的：gauge-wave.py 和 analysis/ 里的两个脚本。",
+        "生成的：build/、code/、raw_data/、data/，都写在 .gitignore 里，不上传 GitHub。",
+        "图里 code/、raw_data/、data/ 画在默认位置 example/；设了 $GAUGE_WAVE_WORK_DIR 就写到那个目录，仓库外面也行。"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "一次性的和有价值的",
+      "items": [
+        "build/、code/ 随时可以重新生成；code/ 所有网格共用，每次生成前清空。",
+        "raw_data/ 和 data/ 按网格分开（n9/、n27/、n81/），是有价值的结果。"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "来源",
+      "items": [
+        "依据 peano-minimal 的 README 和 example/ 里的脚本。"
+      ]
+    }
+  ]
+}

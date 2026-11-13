@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Convergence study on 9, 27 and 81 points</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script src="i18n.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar"><a class="back" href="index.html"><span data-lang="zh-CN">← Peano 学习图册</span><span data-lang="en">← Peano Notebook</span></a><div class="lang-switch" role="group" aria-label="Language / 语言"><button type="button" data-lang-btn="en" aria-pressed="true">EN</button><button type="button" data-lang-btn="zh-CN" aria-pressed="false">中文</button></div></div>
+  <p class="eyebrow"><span data-lang="zh-CN">教程</span><span data-lang="en">Tutorial</span> · peano-minimal · 2026-11-12</p>
+  <nav class="toc" id="toc" hidden aria-label="contents"><p><span data-lang="zh-CN">目录</span><span data-lang="en">Contents</span></p><ol id="toc-list"></ol></nav>
+  <article class="article" id="article"></article>
+</main>
+<script type="text/markdown" id="md-zh-CN">
+# 收敛性分析：同一份代码，9、27、81 三种网格
+
+这篇教程接着《从 Python 脚本到模拟结果》。上一篇讲了一次模拟是怎么跑起来的，这一篇用**同一份代码**在三种粗细的网格上各跑一次，再把结果放在一起，看误差随网格加密下降得多快，也就是**收敛阶**。
+
+所有命令都在 peano-minimal 的 `example/` 目录里运行，第 0 步（编译框架库）要先做好。生成的文件（`code/`、`raw_data/`、`data/`）只属于这一次模拟，本教程把它们写到仓库外面的工作目录，由环境变量 `GAUGE_WAVE_WORK_DIR` 指定：
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave
+```
+
+三个脚本都读这个变量，`gauge-wave.py` 开头会打印 `work folder: ...` 让你确认。不设它，这三个目录就出现在 `example/` 里，其余一切照旧。下文说 `raw_data/n27/` 之类的路径，都是相对这个工作目录。类比：42100 的零件盒（`build/`）留在家里，每次搭出来的挖掘机和它挖的土搬到另一间屋子。
+
+---
+
+## 1. 为什么要做收敛分析
+
+只跑一种网格，拿到误差 5e-5，并不能说明代码是对的：误差可能本来就该更小，也可能碰巧小。收敛分析换一个问法：**网格加密以后，误差有没有按理论预期的速度下降？**
+
+- 空间用四阶中心差分（FD4）：误差 $\propto h^4$，$h$ 是网格间距。
+- 时间用四阶 Runge-Kutta（RK4）：误差 $\propto \Delta t^4$。
+- 时间步长由 CFL 条件决定，$\Delta t \propto h$。所以两部分合起来，误差还是 $\propto h^4$。
+
+网格每加密 3 倍，$h$ 变成 $h/3$，误差就应该变成原来的 $1/3^4 = 1/81$。
+
+从两种网格的误差可以直接算出**实测收敛阶**：
+
+$$p = \frac{\log\left(E_N / E_{3N}\right)}{\log 3}$$
+
+$E_N$ 是 $N$ 个网格点时的误差。p 接近 4，说明代码按设计在工作；p 明显偏小，通常意味着某处有 bug，或者网格还太粗。
+
+**类比**：还是乐高 42100。假设用越来越小的零件拼同一台 R 9800，零件边长每次缩小到 1/3。零件越小，曲面越圆滑，模型越像真挖掘机。收敛阶衡量的是**每缩小一次零件，模型和真车的差别缩小多少**。四阶意味着零件缩小到 1/3，差别缩小到 1/81。
+
+![同一台挖掘机，三种分辨率](content/img/lego/scales.zh-CN.svg)
+
+*同一台挖掘机，横跨车身分别用 9、27、81 块“零件”（蓝色），背后浅色的是真实形状。零件越小，越接近真车。*
+
+---
+
+## 2. 三种网格是怎么来的
+
+每个方向的网格点数 = 每个方向的单元数 × 每个 patch 每个方向的点数。
+
+Peano 的网格是三分的：它至少把单位立方体每个方向分成 3 个单元，再按需要把单元继续分成 3×3×3 个小单元。所以单元数只能是 3、9、27……再乘上 patch 大小：
+
+| 网格点数 | 单元数 × patch 大小 | `volume_size` |
+|---|---|---|
+| 9 | 3 × 3 | 0.12 |
+| 27 | 3 × 9 | 0.04 |
+| 81 | 9 × 9 | 0.013 |
+
+`gauge-wave.py` 开头的 `Grid` 字典写的就是这张表。
+
+- `volume_size` 控制细分到哪一层：只要单元边长 ≥ `volume_size × patch 大小`，Peano 就把它再分一次。所以 `volume_size` 要取得比目标间距 1/N 稍大一点。
+- 差分格式看到的只是一个间距为 1/N 的均匀网格。网格怎么切成 patch，不影响数值结果。
+
+> **一个容易踩的坑**：patch 大小是 9 时，网格最粗就是 27 点。曾经用 patch 9 加 `volume_size = 0.12` 想得到 9 点，结果日志里写着 `min mesh size=0.333333, #local cells=(27/1)`：还是 3×3×3 个单元，也就是 27 点。**看日志里的 `min mesh size` 确认网格**，是个好习惯。
+
+**类比**：乐高的梁有固定的长度规格，想做出某个尺寸，只能在"几根梁 × 每根多长"之间组合。
+
+---
+
+## 3. 跑起来
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # 每个新终端设一次
+cd peano-minimal/example
+python3 gauge-wave.py --points 9  --run
+python3 gauge-wave.py --points 27 --run
+python3 gauge-wave.py --points 81 --run
+python3 analysis/convergence.py
+```
+
+每条 `gauge-wave.py` 都会清空 `code/`、重新生成和编译，再运行。快照写到各自的 `raw_data/n<点数>/`，互不覆盖。也可以每跑完一种就用 `python3 analysis/check.py --points <点数>` 单独检查。
+
+### 要花多少时间和空间
+
+下面是在一台笔记本上单核跑的实测结果：
+
+| 网格点数 | 时间步数 | 每步耗时 | 模拟总耗时 | 快照大小 |
+|---|---|---|---|---|
+| 9 | 109 | 0.020 s | 约 2 秒 | 3.8 MB |
+| 27 | 325 | 0.28 s | 约 91 秒 | 98 MB |
+| 81 | 974 | 8.5 s | 约 2 小时 18 分 | 2.7 GB |
+
+另外每次生成和编译还要约 15 秒。
+
+为什么加密一次贵这么多：
+
+- 网格点数变成 $3^3 = 27$ 倍，每一步的计算量也就是 27 倍左右；
+- CFL 条件要求时间步长跟着变成 1/3，所以步数变成 **3 倍**。
+
+两者相乘，大约 **81 倍**。实测从 27 点到 81 点，每步耗时是 30 倍，总耗时是 91 倍，和估计一致。从 9 点到 27 点每步只多了 14 倍，因为 9 点网格太小，每步里固定的开销占了大头。
+
+**类比**：零件边长缩小到 1/3，同样大小的模型要用 27 倍的零件；每个动作还要拆成 3 倍多的小步来拍。所以 81 点那次要跑两个多小时，最好放在后台或者超算上。
+
+---
+
+## 4. 哪些步骤要重跑，哪些不用
+
+跑三种网格，并不是每一步都要做三遍：
+
+| 步骤 | 命令 | 跑三种网格时做几次 | 为什么 | 类比 |
+|---|---|---|---|---|
+| 0 | `cmake` + `cmake --build` | **1 次** | 框架库和网格大小无关 | 通用零件分包只生产一次，拼什么都用它 |
+| 1a | `gauge-wave.py`（生成） | **每种网格 1 次** | 网格大小是写死在生成代码里的常数 | 换一种比例，就要重新设计、重写说明书 |
+| 1b | `gauge-wave.py`（编译） | **每种网格 1 次** | 生成的代码变了，必须重新编译；第 0 步的库直接复用 | 重新压专属零件、重新拼；通用分包不用重新生产 |
+| 2 | `--run` | **每种网格 1 次** | 每种网格的结果都要算 | 每台车各开一轮，照片各放一个相册 |
+| 3 | `check.py --points N` | 每种网格 1 次，**随时可以重跑** | 只读快照，不碰模拟 | 翻相册检查，不用再开车 |
+| 3 | `convergence.py` | 最后 1 次，**随时可以重跑** | 只读三种网格的快照 | 把三本相册摆在一起比 |
+
+一句话：**模拟（1a、1b、2）每种网格各跑一次，第 0 步只做一次，分析（3）想跑几次就跑几次。**
+
+有两点容易弄错：
+
+- **`code/` 只装着最后一次生成的程序。** `gauge-wave.py` 每次都会先清空 `code/`，所以跑完 81 点以后，27 点的程序已经没了。想再跑一次 27 点，要重新执行 `gauge-wave.py --points 27 --run`，多花约 15 秒生成和编译。类比：拼装台每次开工前都会清空，上一台车已经拆了，但它拍的照片（`raw_data/n27/`）还在。
+- **分析不需要重跑模拟。** `check.py` 和 `convergence.py` 只读 `raw_data/` 里的快照，改了画图或者分析方法，直接重跑它们就行。
+
+### 以后改了什么，要重跑什么
+
+| 你改了 | 第 0 步 | 1a + 1b | 第 2 步 | `check.py` / `convergence.py` |
+|---|---|---|---|---|
+| 只改了画图、分析脚本 | – | – | – | **重跑** |
+| `gauge-wave.py` 的参数（网格、结束时间、输出间隔……） | – | **重跑** | **重跑** | **重跑** |
+| 想重跑某种网格（`code/` 已被别的网格覆盖） | – | **重跑** | **重跑** | **重跑** |
+| `src/` 里的 Python（代码生成器） | – | **重跑** | **重跑** | **重跑** |
+| `src/` 里的 C++（框架库） | **重跑** | **重跑**（1b） | **重跑** | **重跑** |
+
+一个真实的例子：收敛图的横轴刻度原来挤在一起，改成直接标 1/81、1/27、1/9 时，只改了 `convergence.py`，也只重跑了它，1 秒就完成了，那 2 个多小时的 81 点模拟完全不用碰。反过来，**改了模拟参数就要把 81 点重跑一遍，又是两个多小时**。所以动手前先想清楚：这个改动只影响分析，还是要改模拟本身？
+
+---
+
+## 5. 怎么量误差
+
+`check.py` 和 `convergence.py` 都在同一条线上量误差：**y = z = 0.5，沿 x 方向**，时间取最后一个快照 t = 1。
+
+- gauge wave 只沿 x 方向变化，这条线已经包含了全部信息；
+- 精确解是 $\alpha(x,t) = \sqrt{1 - 0.1\,\sin\big(2\pi(x-t)\big)}$；
+- 在线上的每个网格点 $x_i$，算数值解 $\alpha_i$ 和精确解的差，取**最大误差**和**均方根误差**（L2）：
+
+$$E_{\max} = \max_i \big|\alpha_i - \alpha(x_i,t)\big|, \qquad E_{L2} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\big(\alpha_i - \alpha(x_i,t)\big)^2}$$
+
+### 只读需要的数据
+
+81 点的快照一共 2.7 GB。如果每量一个点都把所有快照完整读一遍，会慢到没法用。Peano 的快照读取器（`tarch.plotter`）可以传一个 **patch 过滤器**：只解析和这条线相交的 patch，其他的直接跳过。所以 `convergence.py` 读完三种网格的全部快照，总共只用了约 1 秒。
+
+### 两个保护措施
+
+- **只比较同一时刻**：三次运行都必须跑到 t = 1。还在跑、没到 t = 1 的网格，`convergence.py` 会跳过并提示。
+- **快照时间以文件为准**：输出时刻会对齐到时间步，不一定正好是 0.1 的整数倍（比如 9 点那次是 0.1019、0.2037……）。精确解用的是快照里记录的实际时间。
+
+---
+
+## 6. 结果
+
+`convergence.py` 在 t = 1 时量到的误差：
+
+| 网格点数 $N$ | 网格间距 $h$ | 最大误差 $E_{\max}$ | 收敛阶 | L2 误差 $E_{L2}$ | 收敛阶 |
+|---|---|---|---|---|---|
+| 9 | $1/9$ | $3.68 \times 10^{-3}$ | – | $1.95 \times 10^{-3}$ | – |
+| 27 | $1/27$ | $4.98 \times 10^{-5}$ | 3.92 | $2.63 \times 10^{-5}$ | 3.92 |
+| 81 | $1/81$ | $6.22 \times 10^{-7}$ | 3.99 | $3.32 \times 10^{-7}$ | 3.98 |
+
+理论值是 4。终端里打印的是同样的数字，格式见第 9 节。
+
+**实测收敛阶从 3.92 升到 3.99**，非常接近理论值 4。网格每加密 3 倍，误差大约变成 1/74，然后是 1/80。
+
+### 误差和网格间距
+
+![误差随网格间距的变化（对数坐标）](content/img/convergence/convergence.png)
+
+对数坐标下，四阶收敛是一条斜率为 4 的直线。虚线是斜率 4 的参考线。三个点几乎都落在上面，只有最粗的 9 点稍微偏离。
+
+### 误差随时间的变化
+
+![三种网格的最大误差随时间的变化](content/img/convergence/error-vs-time.png)
+
+三条曲线形状相同，只是上下平移：误差都在前 0.4 的时间里增长得最快，之后增长变慢。每两条曲线之间的距离差不多都是两个数量级（1/81）。
+
+### 缩放后的误差剖面
+
+![按 (N/27)^4 缩放后的误差剖面](content/img/convergence/error-profiles.png)
+
+这张图把 t = 1 时沿 x 的误差乘上 $(N/27)^4$。如果误差严格按 $h^4$ 缩小，缩放后的曲线应该完全重合。
+
+- **27 点和 81 点几乎完全重合**，说明这两种网格都已经进入**渐近区**：$E \approx C\,h^4 f(x)$，$f(x)$ 只和问题本身有关。
+- **9 点明显偏离**：一个波长只有 9 个点，网格太粗，还没进入渐近区。这也是为什么 9→27 的收敛阶（3.92）比 27→81（3.99）低一点。
+
+**类比**：零件够小以后，每再缩小一次，模型和真车的差别都按同样的比例缩小，差别出现的位置也不变；零件太大时，连基本形状都拼不像，差别就没有规律。
+
+---
+
+## 7. 常见的坑
+
+- **网格太粗**：最粗的网格往往还不在渐近区，用它算出的收敛阶会偏低。至少要用三种网格，看收敛阶是不是在稳定地接近理论值。
+- **比较的时刻不一致**：误差随时间增长，不同时刻的误差不能直接比较。
+- **不同网格的结果互相覆盖**：快照文件名是固定的。本教程让每种网格写到自己的 `raw_data/n<点数>/`。
+- **舍入误差**：网格非常细时，误差会降到浮点精度附近，收敛阶就不再是 4。这里最小的误差是 6e-7，离双精度的 1e-16 还很远，不受影响。
+- **磁盘空间**：81 点那次的快照有 2.7 GB。只做收敛分析的话，可以把 `gauge-wave.py` 里的 `TimeBetweenPlots` 调大，少写几个快照。
+
+---
+
+## 8. 生成了哪些文件
+
+![跑完三组以后的文件结构](diagrams/static/files-after.zh-CN.png)
+
+*跑完 9、27、81 三组和分析以后：仓库里只多了 `build/`，其余生成的文件都在工作目录 `$GAUGE_WAVE_WORK_DIR` 里。不设这个变量时，工作目录下的三个目录会出现在 `example/` 里，并且都写在 .gitignore 里。可以打开[交互版](view.html#files-after)折叠、展开各个目录，也可以对照[跑之前](view.html#files-before)的样子。*
+
+---
+
+## 9. 如何测试
+
+改了代码，或者刚从 GitHub 克隆下来时，用下面的步骤确认一切正常。
+
+### 快速测试（不跑 81 点）
+
+第 0 步做完以后，大约 3 分钟：
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # 每个新终端设一次
+cd peano-minimal/example
+python3 gauge-wave.py --points 9  --run
+python3 gauge-wave.py --points 27 --run
+python3 analysis/check.py --points 9
+python3 analysis/check.py --points 27
+python3 analysis/convergence.py
+```
+
+`convergence.py` 输出的最后几行应该是：
+
+```
+ points          h    max error      order     L2 error      order
+      9    0.11111    3.680e-03          -    1.951e-03          -
+     27    0.03704    4.976e-05       3.92    2.628e-05       3.92
+```
+
+然后检查五件事（2–4 都在工作目录里）：
+
+1. `gauge-wave.py` 开头打印的 `work folder:` 是你设的目录；
+2. `raw_data/n9/`、`raw_data/n27/` 里有快照 `solution-CCZ4*.peano-patch-file` 和 `run.log`；
+3. `data/n9/`、`data/n27/` 里有 `centre.csv`、`profile.csv`、`errors.csv`、`check-centre.png`、`check-profile.png`；
+4. `data/convergence/` 里有 `convergence.csv` 和三张图；
+5. 在仓库根目录运行 `git status`，不出现任何新文件，`example/` 里只有脚本。
+
+### 完整测试（加上 81 点）
+
+```bash
+python3 gauge-wave.py --points 81 --run      # 约 2 小时 20 分，2.7 GB
+python3 analysis/check.py --points 81
+python3 analysis/convergence.py
+```
+
+预期：81 点的最大误差 6.217e-07，27→81 的实测收敛阶 3.99。注意 9 点和 27 点不用重跑，`convergence.py` 会直接读它们已有的结果。
+
+### 测试完清理
+
+```bash
+rm -rf "$GAUGE_WAVE_WORK_DIR"    # 第 1a 到第 3 步产生的所有东西
+rm -rf peano-minimal/build       # 连第 0 步也删掉，回到刚克隆下来的状态
+```
+
+删之前先 `echo $GAUGE_WAVE_WORK_DIR` 看一眼，确认指向的是工作目录。没设变量时，改为在 `example/` 里运行 `rm -rf code raw_data data`。
+
+> 这些测试在一份从本地 git 仓库克隆出来的副本上做过：第 0 步、9 点、27 点、两个分析脚本都跑通了，结果和上面一致；从别的目录运行分析脚本、把整个项目挪到别处以后再分析，也都正常。用 `GAUGE_WAVE_WORK_DIR` 把结果写到仓库外面也测过，9 点、27 点的结果完全一样。81 点那次是在改目录结构之前跑的，结果见第 6 节。
+</script>
+<script type="text/markdown" id="md-en">
+# Convergence study: the same code on 9, 27 and 81 grid points
+
+This tutorial follows *From a Python script to simulation results*. That one explained how a single run works; this one runs **the same code** on three grids of different resolution and puts the results side by side, to see how fast the error falls as the grid gets finer: the **order of convergence**.
+
+All commands run in the `example/` folder of peano-minimal, after step 0 (building the framework libraries). The generated files (`code/`, `raw_data/`, `data/`) belong to this one simulation, so this tutorial writes them to a work folder outside the repository, set by the environment variable `GAUGE_WAVE_WORK_DIR`:
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave
+```
+
+All three scripts read it, and `gauge-wave.py` prints `work folder: ...` so you can check. Without it these three folders appear in `example/` and everything else stays the same. Paths such as `raw_data/n27/` below are relative to the work folder. Analogy: the 42100 parts boxes (`build/`) stay at home, while each excavator you build and the earth it digs go to another room.
+
+---
+
+## 1. Why a convergence study
+
+A single run with an error of 5e-5 does not prove that the code is right: the error might be supposed to be much smaller, or it might be small by luck. A convergence study asks a different question: **when the grid is refined, does the error fall as fast as theory says it should?**
+
+- In space we use fourth-order central differences (FD4): the error is $\propto h^4$, where $h$ is the grid spacing.
+- In time we use fourth-order Runge-Kutta (RK4): the error is $\propto \Delta t^4$.
+- The CFL condition ties the time step to the grid, $\Delta t \propto h$. So together the error is still $\propto h^4$.
+
+Every refinement by a factor of 3 turns $h$ into $h/3$, so the error should shrink by $3^4 = 81$.
+
+From the errors on two grids you get the **observed order** directly:
+
+$$p = \frac{\log\left(E_N / E_{3N}\right)}{\log 3}$$
+
+where $E_N$ is the error with $N$ grid points. A p close to 4 means the code works as designed; a clearly smaller p usually means a bug somewhere, or a grid that is still too coarse.
+
+**Analogy**: back to LEGO set 42100. Imagine building the same R 9800 from ever smaller parts, each time with parts a third of the size. The smaller the parts, the smoother the curves and the closer the model looks to the real excavator. The order of convergence measures **how much the difference to the real machine shrinks each time the parts shrink**. Fourth order means: parts a third of the size, difference 81 times smaller.
+
+![The same excavator at three resolutions](content/img/lego/scales.en.svg)
+
+*The same excavator with 9, 27 and 81 “parts” across its width (blue), in front of the real shape (light). The smaller the parts, the closer to the real machine.*
+
+---
+
+## 2. Where the three grids come from
+
+Grid points per axis = cells per axis × points per patch and axis.
+
+Peano's grids split by three: the unit cube is split into at least 3 cells per axis, and cells can be split again into 3×3×3 children. So the number of cells per axis is 3, 9, 27, …, multiplied by the patch size:
+
+| Grid points | cells × patch size | `volume_size` |
+|---|---|---|
+| 9 | 3 × 3 | 0.12 |
+| 27 | 3 × 9 | 0.04 |
+| 81 | 9 × 9 | 0.013 |
+
+The `Grid` dictionary at the top of `gauge-wave.py` is this table.
+
+- `volume_size` decides how far to refine: Peano splits a cell again as long as its edge is ≥ `volume_size × patch size`. So `volume_size` has to be a little larger than the target spacing 1/N.
+- The finite difference scheme only sees a uniform grid with spacing 1/N. How the grid is cut into patches does not change the numerical result.
+
+> **An easy trap**: with patches of size 9, the coarsest possible grid has 27 points. An earlier attempt used patch size 9 with `volume_size = 0.12` to get 9 points, and the log said `min mesh size=0.333333, #local cells=(27/1)`: still 3×3×3 cells, so 27 points. **Checking `min mesh size` in the log** is a good habit.
+
+**Analogy**: LEGO beams come in fixed lengths; to reach a given size you can only combine "how many beams × how long each".
+
+---
+
+## 3. Running it
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # once per new terminal
+cd peano-minimal/example
+python3 gauge-wave.py --points 9  --run
+python3 gauge-wave.py --points 27 --run
+python3 gauge-wave.py --points 81 --run
+python3 analysis/convergence.py
+```
+
+Each `gauge-wave.py` call empties `code/`, regenerates and rebuilds, then runs. Snapshots go to that grid's own `raw_data/n<points>/`, so the runs do not overwrite each other. You can also check each run on its own with `python3 analysis/check.py --points <points>`.
+
+### How much time and space it takes
+
+Measured on one core of a laptop:
+
+| Grid points | Time steps | Time per step | Total run time | Snapshots |
+|---|---|---|---|---|
+| 9 | 109 | 0.020 s | about 2 seconds | 3.8 MB |
+| 27 | 325 | 0.28 s | about 91 seconds | 98 MB |
+| 81 | 974 | 8.5 s | about 2 hours 18 minutes | 2.7 GB |
+
+Generating and building adds about 15 seconds each time.
+
+Why one refinement costs so much more:
+
+- the number of grid points grows by $3^3 = 27$, and so does the work per step;
+- the CFL condition shrinks the time step to a third, so there are **3 times** as many steps.
+
+Together that is about **81 times** the cost. From 27 to 81 points, the time per step grew 30-fold and the total run time 91-fold, in line with that estimate. From 9 to 27 points the time per step grew only 14-fold, because on the tiny 9-point grid a fixed overhead per step dominates.
+
+**Analogy**: with parts a third of the size, a model of the same size needs 27 times as many parts, and every move has to be split into three times as many small steps. That is why the 81-point run takes over two hours and is best left running in the background or on a cluster.
+
+---
+
+## 4. Which steps to rerun, and which not
+
+Running three grids does not mean doing every step three times:
+
+| Step | Command | How often for three grids | Why | Analogy |
+|---|---|---|---|---|
+| 0 | `cmake` + `cmake --build` | **once** | The framework libraries do not depend on the grid | The standard bags are made once and used for every model |
+| 1a | `gauge-wave.py` (generate) | **once per grid** | The grid size is a constant baked into the generated code | A different scale needs a new design and new instructions |
+| 1b | `gauge-wave.py` (build) | **once per grid** | The generated code changed and must be compiled again; the step 0 libraries are reused | Mould new set-specific parts and build again; the standard bags stay |
+| 2 | `--run` | **once per grid** | Every grid needs its own results | Each model gets its own digging session and its own photo album |
+| 3 | `check.py --points N` | once per grid, **rerun any time** | Only reads snapshots, never touches the simulation | Look through the album; no need to drive again |
+| 3 | `convergence.py` | once at the end, **rerun any time** | Only reads the snapshots of all grids | Lay the three albums side by side |
+
+In one sentence: **the simulation (1a, 1b, 2) runs once per grid, step 0 runs once, and the analysis (3) as often as you like.**
+
+Two things are easy to get wrong:
+
+- **`code/` only holds the last generated program.** `gauge-wave.py` empties `code/` every time, so after the 81-point run the 27-point program is gone. To run 27 points again, run `gauge-wave.py --points 27 --run` again, which costs about 15 seconds of generating and building. Analogy: the building table is cleared before every build, so the previous excavator has been taken apart, but its photos (`raw_data/n27/`) are still there.
+- **Analysis never needs the simulation again.** `check.py` and `convergence.py` only read the snapshots in `raw_data/`; after changing a plot or the analysis, just rerun them.
+
+### Later: what to rerun after a change
+
+| You changed | Step 0 | 1a + 1b | Step 2 | `check.py` / `convergence.py` |
+|---|---|---|---|---|
+| Only plots or analysis scripts | – | – | – | **rerun** |
+| Parameters in `gauge-wave.py` (grid, end time, plot interval, …) | – | **rerun** | **rerun** | **rerun** |
+| Rerun a grid whose program in `code/` was replaced by another grid | – | **rerun** | **rerun** | **rerun** |
+| Python in `src/` (the code generator) | – | **rerun** | **rerun** | **rerun** |
+| C++ in `src/` (the framework libraries) | **rerun** | **rerun** (1b) | **rerun** | **rerun** |
+
+A real example: the tick labels of the convergence plot were crowded, and labelling the grids directly as 1/81, 1/27, 1/9 only changed `convergence.py`. Rerunning just that script took a second; the two-hour 81-point simulation was not touched. The other way round, **a change to the simulation parameters means running the 81-point case again: another two hours.** So before you change something, ask: does it only affect the analysis, or the simulation itself?
+
+---
+
+## 5. How the error is measured
+
+`check.py` and `convergence.py` measure the error along the same line: **y = z = 0.5, along x**, in the last snapshot at t = 1.
+
+- The gauge wave only varies along x, so this line carries all the information.
+- The exact solution is $\alpha(x,t) = \sqrt{1 - 0.1\,\sin\big(2\pi(x-t)\big)}$.
+- At every grid point $x_i$ on the line we take the difference between the numerical value $\alpha_i$ and the exact solution, and report the **maximum error** and the **root mean square error** (L2):
+
+$$E_{\max} = \max_i \big|\alpha_i - \alpha(x_i,t)\big|, \qquad E_{L2} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}\big(\alpha_i - \alpha(x_i,t)\big)^2}$$
+
+### Read only what you need
+
+The 81-point snapshots add up to 2.7 GB. Reading all snapshots in full for every single probe point would be far too slow. Peano's snapshot reader (`tarch.plotter`) accepts a **patch filter**: it parses only the patches that touch the line and skips all others. That is why `convergence.py` reads every snapshot of all three grids in about one second.
+
+### Two safeguards
+
+- **Compare at the same time**: all three runs must reach t = 1. `convergence.py` skips a grid that is still running and says so.
+- **Take the time from the snapshot**: output times snap to time steps and are not always exact multiples of 0.1 (the 9-point run writes at 0.1019, 0.2037, …). The exact solution uses the time recorded in each snapshot.
+
+---
+
+## 6. Results
+
+The errors `convergence.py` measures at t = 1:
+
+| Grid points $N$ | Spacing $h$ | Max error $E_{\max}$ | Order | L2 error $E_{L2}$ | Order |
+|---|---|---|---|---|---|
+| 9 | $1/9$ | $3.68 \times 10^{-3}$ | – | $1.95 \times 10^{-3}$ | – |
+| 27 | $1/27$ | $4.98 \times 10^{-5}$ | 3.92 | $2.63 \times 10^{-5}$ | 3.92 |
+| 81 | $1/81$ | $6.22 \times 10^{-7}$ | 3.99 | $3.32 \times 10^{-7}$ | 3.98 |
+
+The theoretical order is 4. The terminal prints the same numbers; section 9 shows the format.
+
+**The observed order rises from 3.92 to 3.99**, very close to the theoretical 4. Each refinement by 3 divides the error by about 74, then by about 80.
+
+### Error against grid spacing
+
+![Error against grid spacing on log-log axes](content/img/convergence/convergence.png)
+
+On log-log axes, fourth-order convergence is a straight line with slope 4. The dashed line is a slope-4 guide. The three points sit almost exactly on it; only the coarsest, 9 points, is slightly off.
+
+### Error over time
+
+![Maximum error over time for the three grids](content/img/convergence/error-vs-time.png)
+
+The three curves have the same shape and are only shifted up or down: the error grows fastest during the first 0.4 time units and more slowly afterwards. Neighbouring curves are about two orders of magnitude (a factor of 81) apart.
+
+### Scaled error profiles
+
+![Error profiles scaled by (N/27)^4](content/img/convergence/error-profiles.png)
+
+This plot multiplies the error along x at t = 1 by $(N/27)^4$. If the error shrank exactly like $h^4$, the scaled curves would lie on top of each other.
+
+- **27 and 81 points lie almost exactly on top of each other**: both grids are in the **asymptotic regime**, where $E \approx C\,h^4 f(x)$ and $f(x)$ depends only on the problem.
+- **9 points is clearly off**: with only 9 points per wavelength the grid is too coarse to be in the asymptotic regime yet. This is also why the order from 9 to 27 (3.92) is a little lower than from 27 to 81 (3.99).
+
+**Analogy**: once the parts are small enough, every further reduction shrinks the difference to the real machine by the same factor, and the differences stay in the same places. With parts that are too big, even the basic shape is off and the differences follow no pattern.
+
+---
+
+## 7. Common pitfalls
+
+- **Grids that are too coarse**: the coarsest grid is often not yet asymptotic, and the order computed from it comes out too low. Use at least three grids and check that the order settles towards the theoretical value.
+- **Comparing different times**: the error grows over time, so errors at different times are not comparable.
+- **Runs overwriting each other**: snapshot file names are fixed. Here each grid writes to its own `raw_data/n<points>/`.
+- **Round-off**: on very fine grids the error drops towards floating point precision and the order is no longer 4. The smallest error here is 6e-7, far above double precision (1e-16), so this does not matter yet.
+- **Disk space**: the 81-point snapshots take 2.7 GB. For a convergence study alone you can raise `TimeBetweenPlots` in `gauge-wave.py` and write fewer snapshots.
+
+---
+
+## 8. Files produced
+
+![The files after the three runs](diagrams/static/files-after.en.png)
+
+*After the 9-, 27- and 81-point runs and the analysis: the repository gains only `build/`; everything else generated is in the work folder `$GAUGE_WAVE_WORK_DIR`. Without the variable those three folders appear inside `example/`, where .gitignore covers them. Open the [interactive version](view.html#files-after) to fold and unfold folders, or compare with the [files before running](view.html#files-before).*
+
+---
+
+## 9. How to test
+
+After changing the code, or right after cloning from GitHub, use these steps to check that everything works.
+
+### Quick test (without 81 points)
+
+About 3 minutes once step 0 is done:
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # once per new terminal
+cd peano-minimal/example
+python3 gauge-wave.py --points 9  --run
+python3 gauge-wave.py --points 27 --run
+python3 analysis/check.py --points 9
+python3 analysis/check.py --points 27
+python3 analysis/convergence.py
+```
+
+The last lines of `convergence.py` should read:
+
+```
+ points          h    max error      order     L2 error      order
+      9    0.11111    3.680e-03          -    1.951e-03          -
+     27    0.03704    4.976e-05       3.92    2.628e-05       3.92
+```
+
+Then check five things (2–4 are in the work folder):
+
+1. the `work folder:` line printed by `gauge-wave.py` is the folder you set;
+2. `raw_data/n9/` and `raw_data/n27/` hold the snapshots `solution-CCZ4*.peano-patch-file` and `run.log`;
+3. `data/n9/` and `data/n27/` hold `centre.csv`, `profile.csv`, `errors.csv`, `check-centre.png`, `check-profile.png`;
+4. `data/convergence/` holds `convergence.csv` and three plots;
+5. `git status` in the repository root shows no new files, and `example/` holds only the scripts.
+
+### Full test (with 81 points)
+
+```bash
+python3 gauge-wave.py --points 81 --run      # about 2 hours 20 minutes, 2.7 GB
+python3 analysis/check.py --points 81
+python3 analysis/convergence.py
+```
+
+Expected: max error 6.217e-07 for 81 points, observed order 3.99 from 27 to 81. The 9- and 27-point runs do not need to be repeated; `convergence.py` reads their existing results.
+
+### Clean up afterwards
+
+```bash
+rm -rf "$GAUGE_WAVE_WORK_DIR"    # everything steps 1a-3 produced
+rm -rf peano-minimal/build       # also step 0, back to a fresh clone
+```
+
+Run `echo $GAUGE_WAVE_WORK_DIR` first to make sure it points at the work folder. Without the variable, run `rm -rf code raw_data data` in `example/` instead.
+
+> These tests were run on a copy cloned from a local git repository: step 0, 9 points, 27 points and both analysis scripts worked and gave the results above; running the analysis from another folder, and after moving the whole project elsewhere, worked too. Writing the results outside the repository with `GAUGE_WAVE_WORK_DIR` was tested too, with identical 9- and 27-point results. The 81-point run was done before the folder layout changed; its results are in section 6.
+</script>
+<script>
+  // Formulas: $...$ inline and $$...$$ display, rendered by MathJax as SVG (no fonts or stylesheets needed).
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    svg: { fontCache: "global" },
+    startup: { typeset: false }
+  };
+</script>
+<script src="vendor/mathjax-tex-svg.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script>
+  var SITE_TITLE = {"zh-CN": "Peano 学习图册", "en": "Peano Notebook"};
+  var TITLES = {"zh-CN": "收敛性分析：9、27、81 三种网格", "en": "Convergence study on 9, 27 and 81 points"};
+
+  function render() {
+    var lang = SiteLang.get();
+    var article = document.getElementById("article");
+    var toc = document.getElementById("toc");
+    var list = document.getElementById("toc-list");
+    document.title = TITLES[lang] + " · " + SITE_TITLE[lang];
+    if (!window.marked) {
+      article.innerHTML = "<p class='status'>" + (lang === "en" ? "Could not load the Markdown renderer. Check the network connection and reload." : "Markdown 渲染器没有载入。请检查网络后刷新页面。") + "</p>";
+      return;
+    }
+    // Take the formulas out before Markdown sees them (it would eat _ and \), outside code only.
+    var maths = [];
+    var parts = document.getElementById("md-" + lang).textContent.split(/(```[\s\S]*?```|`[^`\n]*`)/);
+    function keep(open, close) {
+      return function (m, tex) { maths.push(open + tex + close); return "@@MATH" + (maths.length - 1) + "@@"; };
+    }
+    for (var i = 0; i < parts.length; i += 2) {
+      parts[i] = parts[i].replace(/\$\$([\s\S]+?)\$\$/g, keep("\\[", "\\]"))
+                         .replace(/\$([^$\n]+?)\$/g, keep("\\(", "\\)"));
+    }
+    var html = marked.parse(parts.join(""));
+    article.innerHTML = html.replace(/@@MATH(\d+)@@/g, function (m, k) {
+      return maths[+k].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    });
+
+    // Wide tables scroll inside their own box instead of widening the page.
+    article.querySelectorAll("table").forEach(function (tb) {
+      var box = document.createElement("div");
+      box.className = "table-scroll";
+      tb.replaceWith(box);
+      box.appendChild(tb);
+    });
+
+    // A copy button in the top-right corner of every code block.
+    article.querySelectorAll("pre").forEach(function (pre) {
+      var box = document.createElement("div");
+      box.className = "code-box";
+      pre.replaceWith(box);
+      box.appendChild(pre);
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "copy-btn";
+      box.appendChild(btn);
+      label(btn, false);
+      btn.addEventListener("click", function () {
+        var code = pre.querySelector("code") || pre;
+        copyText(code.textContent.replace(/\n$/, "")).then(function (ok) {
+          label(btn, ok ? "done" : "fail");
+          setTimeout(function () { label(btn, false); }, 1600);
+        });
+      });
+    });
+
+    // Contents list from the h2 headings, placed after the title and opening paragraphs.
+    list.innerHTML = "";
+    article.querySelectorAll("h2").forEach(function (h, i) {
+      h.id = "s" + (i + 1);
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "#" + h.id;
+      a.textContent = h.textContent.replace(/^\d+\.\s*/, "");
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    toc.hidden = !list.children.length;
+    var anchor = article.querySelector("h1");
+    while (anchor && anchor.nextElementSibling && anchor.nextElementSibling.tagName === "P") anchor = anchor.nextElementSibling;
+    if (anchor) anchor.after(toc);
+    typeset(article);
+  }
+
+  var COPY = {
+    "zh-CN": { idle: "复制", done: "已复制", fail: "复制失败" },
+    "en": { idle: "Copy", done: "Copied", fail: "Copy failed" }
+  };
+  function label(btn, state) {
+    var words = COPY[SiteLang.get()] || COPY.en;
+    btn.textContent = words[state || "idle"];
+    btn.setAttribute("aria-label", words[state || "idle"]);
+    btn.classList.toggle("done", state === "done");
+  }
+  function copyText(text) {
+    function fallback() {
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      area.remove();
+      return ok;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(); });
+    }
+    return Promise.resolve(fallback());
+  }
+  document.addEventListener("langchange", function () {
+    document.querySelectorAll(".copy-btn").forEach(function (b) { label(b, false); });
+  });
+
+  function typeset(el) {
+    if (!window.MathJax || !MathJax.startup || !MathJax.startup.promise) return;
+    MathJax.startup.promise = MathJax.startup.promise
+      .then(function () { return MathJax.typesetPromise([el]); })
+      .catch(function (e) { console.warn(e); });
+  }
+  document.addEventListener("langchange", render);
+  render();
+</script>
+</body>
+</html>

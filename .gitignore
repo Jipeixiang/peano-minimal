@@ -1,0 +1,26 @@
+# Step 0: Peano libraries, built locally with: cmake -S . -B build && cmake --build build -j
+/build/
+
+# Steps 1a-3: everything example/gauge-wave.py and example/analysis/ generate
+/example/code/
+/example/raw_data/
+/example/data/
+
+# Peano's generator log, in case it lands outside code/
+log.md
+log-*.md
+
+# Python and macOS
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+
+# logs you write with tee, e.g. example/build.log
+/example/*.log
+
+# tutorials/: the claude.ai copy and Archify bookkeeping (contain local paths)
+/tutorials/_artifact/
+/tutorials/diagrams/*.json
+/tutorials/diagrams/receipts/
+/tutorials/diagrams/.archify-*

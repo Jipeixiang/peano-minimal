@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "跑完 9、27、81 三组以后",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "diagrams/files-after.zh-CN.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "home",
+      "label": "~/",
+      "sublabel": "家目录（示例路径）"
+    },
+    {
+      "id": "pm",
+      "label": "Documents/NR/peano-minimal/",
+      "sublabel": "仓库：只多了 build/",
+      "parent": "home"
+    },
+    {
+      "id": "others",
+      "label": "README.md 等 5 个文件",
+      "sublabel": "不变",
+      "parent": "pm"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "不变",
+      "parent": "pm"
+    },
+    {
+      "id": "build",
+      "label": "build/",
+      "sublabel": "第 0 步 · 生成的",
+      "parent": "pm"
+    },
+    {
+      "id": "libs",
+      "label": "lib*.a",
+      "sublabel": "6 个框架静态库",
+      "parent": "build"
+    },
+    {
+      "id": "targets",
+      "label": "PeanoTargets.cmake",
+      "sublabel": "告诉 code/ 去哪找库",
+      "parent": "build"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "只有自己写的脚本",
+      "parent": "pm"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "不变",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "不变",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "不变",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "不变",
+      "parent": "analysis"
+    },
+    {
+      "id": "wd",
+      "label": "sims/gauge-wave/",
+      "sublabel": "$GAUGE_WAVE_WORK_DIR · 第 1a 步时自动创建",
+      "parent": "home"
+    },
+    {
+      "id": "code",
+      "label": "code/",
+      "sublabel": "1a + 1b · 生成的 · 只剩最后一次（81 点）",
+      "parent": "wd"
+    },
+    {
+      "id": "cpp",
+      "label": "*.cpp  *.h",
+      "sublabel": "生成的 C++ 源码和头文件",
+      "parent": "code"
+    },
+    {
+      "id": "subdirs",
+      "label": "kernels/  observers/  …",
+      "sublabel": "生成的 C++，分门别类",
+      "parent": "code"
+    },
+    {
+      "id": "cbuild",
+      "label": "build.gauge-wave/",
+      "sublabel": "CMake 中间文件和 .o",
+      "parent": "code"
+    },
+    {
+      "id": "exe",
+      "label": "gauge-wave",
+      "sublabel": "可执行文件",
+      "parent": "code"
+    },
+    {
+      "id": "log",
+      "label": "log.md",
+      "sublabel": "生成器日志",
+      "parent": "code"
+    },
+    {
+      "id": "raw",
+      "label": "raw_data/",
+      "sublabel": "第 2 步 · 生成的",
+      "parent": "wd"
+    },
+    {
+      "id": "r9",
+      "label": "n9/",
+      "sublabel": "3.8 MB，结构同 n27",
+      "parent": "raw"
+    },
+    {
+      "id": "r27",
+      "label": "n27/",
+      "sublabel": "98 MB",
+      "parent": "raw"
+    },
+    {
+      "id": "idx",
+      "label": "solution-CCZ4.peano-patch-file",
+      "sublabel": "快照索引",
+      "parent": "r27"
+    },
+    {
+      "id": "snaps",
+      "label": "solution-CCZ4-0 … -10",
+      "sublabel": "11 个快照，t = 0 … 1",
+      "parent": "r27"
+    },
+    {
+      "id": "runlog",
+      "label": "run.log",
+      "sublabel": "屏幕输出",
+      "parent": "r27"
+    },
+    {
+      "id": "r81",
+      "label": "n81/",
+      "sublabel": "2.7 GB，结构同 n27",
+      "parent": "raw"
+    },
+    {
+      "id": "data",
+      "label": "data/",
+      "sublabel": "第 3 步 · 生成的",
+      "parent": "wd"
+    },
+    {
+      "id": "d9",
+      "label": "n9/",
+      "sublabel": "结构同 n27",
+      "parent": "data"
+    },
+    {
+      "id": "d27",
+      "label": "n27/",
+      "sublabel": "check.py 的结果",
+      "parent": "data"
+    },
+    {
+      "id": "csv",
+      "label": "*.csv",
+      "sublabel": "3 个 CSV",
+      "parent": "d27"
+    },
+    {
+      "id": "png",
+      "label": "*.png",
+      "sublabel": "2 张图",
+      "parent": "d27"
+    },
+    {
+      "id": "d81",
+      "label": "n81/",
+      "sublabel": "结构同 n27",
+      "parent": "data"
+    },
+    {
+      "id": "dc",
+      "label": "convergence/",
+      "sublabel": "convergence.py 的结果",
+      "parent": "data"
+    },
+    {
+      "id": "dccsv",
+      "label": "convergence.csv",
+      "sublabel": "误差和收敛阶",
+      "parent": "dc"
+    },
+    {
+      "id": "dcpng",
+      "label": "*.png",
+      "sublabel": "3 张图",
+      "parent": "dc"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "生成的文件分两处",
+      "items": [
+        "build/（第 0 步）留在仓库里，所有模拟共用。",
+        "code/、raw_data/、data/ 只属于这一次模拟设置，写到 $GAUGE_WAVE_WORK_DIR。",
+        "不设这个变量时，这三个目录就出现在 example/ 里，结构相同。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "按网格分开",
+      "items": [
+        "raw_data/ 和 data/ 每种网格一个目录：n9/、n27/、n81/，互不覆盖。",
+        "code/ 三种网格共用，只剩最后一次生成的程序。"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "回到跑之前",
+      "items": [
+        "rm -rf \"$GAUGE_WAVE_WORK_DIR\"，再在 peano-minimal 里 rm -rf build。"
+      ]
+    }
+  ]
+}

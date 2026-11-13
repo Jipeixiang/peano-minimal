@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "Before: a fresh clone",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "diagrams/files-before.en.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "peano-minimal/",
+      "sublabel": "no step has run yet"
+    },
+    {
+      "id": "readme",
+      "label": "README.md",
+      "sublabel": "instructions and how to test",
+      "parent": "root"
+    },
+    {
+      "id": "gi",
+      "label": ".gitignore",
+      "sublabel": "lists every generated folder",
+      "parent": "root"
+    },
+    {
+      "id": "cmake",
+      "label": "CMakeLists.txt",
+      "sublabel": "used by step 0",
+      "parent": "root"
+    },
+    {
+      "id": "req",
+      "label": "requirements.txt",
+      "sublabel": "Python dependencies",
+      "parent": "root"
+    },
+    {
+      "id": "lic",
+      "label": "LICENSE",
+      "sublabel": "Peano license",
+      "parent": "root"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "framework source",
+      "parent": "root"
+    },
+    {
+      "id": "peano",
+      "label": "peano4/",
+      "sublabel": "grid, code generator",
+      "parent": "src"
+    },
+    {
+      "id": "tarch",
+      "label": "tarch/",
+      "sublabel": "logging, timing",
+      "parent": "src"
+    },
+    {
+      "id": "toolbox",
+      "label": "toolbox/",
+      "sublabel": "patches, load balancing",
+      "parent": "src"
+    },
+    {
+      "id": "exa",
+      "label": "exahype2/",
+      "sublabel": "PDE framework",
+      "parent": "src"
+    },
+    {
+      "id": "gr",
+      "label": "exagrype/",
+      "sublabel": "CCZ4, gauge wave",
+      "parent": "src"
+    },
+    {
+      "id": "dast",
+      "label": "dastgen2/",
+      "sublabel": "data structure generator",
+      "parent": "src"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "the simulation",
+      "parent": "root"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "steps 1a, 1b, 2",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "step 3: data processing",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "check one run",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "order over three grids",
+      "parent": "analysis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Only source and scripts",
+      "items": [
+        "The framework in src/, and your gauge-wave.py and analysis/.",
+        "No build/, code/, raw_data/ or data/ yet."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Next",
+      "items": [
+        "Step 0 creates build/; gauge-wave.py creates code/ and raw_data/; analysis/ creates data/."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,211 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "运行流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "diagrams/run.zh-CN.html",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "程序与步骤"
+        },
+        "database": {
+          "label": "文件与目录"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "prepare",
+      "label": "首次准备"
+    },
+    {
+      "id": "generate",
+      "label": "生成与编译（每种网格一次）"
+    },
+    {
+      "id": "simulate",
+      "label": "运行模拟"
+    },
+    {
+      "id": "verify",
+      "label": "检查单次结果"
+    },
+    {
+      "id": "analyse",
+      "label": "收敛分析"
+    }
+  ],
+  "mainPath": [
+    "script",
+    "cpp",
+    "compile",
+    "exe",
+    "run",
+    "raw",
+    "check",
+    "data"
+  ],
+  "nodes": [
+    {
+      "id": "libs",
+      "lane": "prepare",
+      "col": 2,
+      "type": "database",
+      "label": "build/ 静态库",
+      "sublabel": "cmake 编译框架库"
+    },
+    {
+      "id": "script",
+      "lane": "generate",
+      "col": 0,
+      "type": "backend",
+      "label": "gauge-wave.py",
+      "sublabel": "--points 9 / 27 / 81"
+    },
+    {
+      "id": "cpp",
+      "lane": "generate",
+      "col": 1,
+      "type": "database",
+      "label": "code/ 生成的 C++",
+      "sublabel": "每次生成前清空"
+    },
+    {
+      "id": "compile",
+      "lane": "generate",
+      "col": 2,
+      "type": "backend",
+      "label": "编译与链接",
+      "sublabel": "src/ 头文件 + build/ 静态库"
+    },
+    {
+      "id": "exe",
+      "lane": "generate",
+      "col": 3,
+      "type": "backend",
+      "label": "code/gauge-wave",
+      "sublabel": "可执行文件"
+    },
+    {
+      "id": "run",
+      "lane": "simulate",
+      "col": 3,
+      "type": "backend",
+      "label": "./gauge-wave",
+      "sublabel": "FD4 + RK4 · 跑到 t = 1"
+    },
+    {
+      "id": "raw",
+      "lane": "simulate",
+      "col": 4,
+      "type": "database",
+      "label": "raw_data/n27/",
+      "sublabel": "快照 + run.log"
+    },
+    {
+      "id": "check",
+      "lane": "verify",
+      "col": 4,
+      "type": "backend",
+      "label": "analysis/check.py",
+      "sublabel": "--points 27 · 对比精确解"
+    },
+    {
+      "id": "data",
+      "lane": "verify",
+      "col": 5,
+      "type": "database",
+      "label": "data/n27/",
+      "sublabel": "CSV + 两张图"
+    },
+    {
+      "id": "conv",
+      "lane": "analyse",
+      "col": 4,
+      "type": "backend",
+      "label": "analysis/convergence.py",
+      "sublabel": "9 / 27 / 81 一起分析"
+    },
+    {
+      "id": "convdata",
+      "lane": "analyse",
+      "col": 5,
+      "type": "database",
+      "label": "data/convergence/",
+      "sublabel": "收敛阶 + 三张图"
+    }
+  ],
+  "edges": [
+    {
+      "from": "script",
+      "to": "cpp"
+    },
+    {
+      "from": "cpp",
+      "to": "compile"
+    },
+    {
+      "from": "libs",
+      "to": "compile",
+      "label": "链接"
+    },
+    {
+      "from": "compile",
+      "to": "exe"
+    },
+    {
+      "from": "exe",
+      "to": "run"
+    },
+    {
+      "from": "run",
+      "to": "raw"
+    },
+    {
+      "from": "raw",
+      "to": "check"
+    },
+    {
+      "from": "check",
+      "to": "data"
+    },
+    {
+      "from": "raw",
+      "to": "conv",
+      "label": "所有网格"
+    },
+    {
+      "from": "conv",
+      "to": "convdata"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "第一次先编译框架",
+      "items": [
+        "cmake -S . -B build && cmake --build build -j，框架库生成在 build/。",
+        "之后每种网格各跑一次 gauge-wave.py --points N --run。"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "生成的东西放在哪",
+      "items": [
+        "code/、raw_data/、data/ 写到 $GAUGE_WAVE_WORK_DIR，没设就在 example/ 里（已写进 .gitignore）。",
+        "code/ 所有网格共用，raw_data/ 和 data/ 按网格分开。"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "收敛",
+      "items": [
+        "FD4 + RK4 的误差应按 h⁴ 下降：网格加密 3 倍，误差变为 1/81。"
+      ]
+    }
+  ]
+}

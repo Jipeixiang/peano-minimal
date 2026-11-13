@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>From a Python script to simulation results</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script src="i18n.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar"><a class="back" href="index.html"><span data-lang="zh-CN">← Peano 学习图册</span><span data-lang="en">← Peano Notebook</span></a><div class="lang-switch" role="group" aria-label="Language / 语言"><button type="button" data-lang-btn="en" aria-pressed="true">EN</button><button type="button" data-lang-btn="zh-CN" aria-pressed="false">中文</button></div></div>
+  <p class="eyebrow"><span data-lang="zh-CN">教程</span><span data-lang="en">Tutorial</span> · peano · exagrype · 2026-11-12</p>
+  <nav class="toc" id="toc" hidden aria-label="contents"><p><span data-lang="zh-CN">目录</span><span data-lang="en">Contents</span></p><ol id="toc-list"></ol></nav>
+  <article class="article" id="article"></article>
+</main>
+<script type="text/markdown" id="md-zh-CN">
+# 从 Python 脚本到模拟结果：ExaGRyPE gauge wave 是怎么跑起来的
+
+这篇教程面向刚接触 Peano / ExaHyPE 2 / ExaGRyPE 的人。它不讲 CCZ4 的物理，而是讲清楚一件事：
+**从敲下第一条命令到拿到 lapse 误差，中间每一步在干什么、产生了哪些文件、出错时该去哪里找。**
+
+例子是 gauge wave（规范波）测试：CCZ4 方程，四阶中心差分（FD4）加 RK4 时间积分，周期边界，每个方向 27 个网格点，跑一个周期（t = 1）。
+
+命令以 peano-minimal 为准：它是 Peano 的精简版，只包含这个算例用到的代码。文中说的 `peano/src`、`peano/build` 对应 peano-minimal 里的 `src/`、`build/`，道理对完整的 Peano 仓库同样适用。
+
+---
+
+## 1. 全景：四个步骤
+
+可以把整件事类比成**拼一台乐高 Technic 42100（Liebherr R 9800 遥控挖掘机），然后开着它挖土**。这一套有 4,108 个零件、7 个电机、2 个 Smart Hub，用手机上的 Control+ app 遥控：
+
+| 步骤 | 命令 | 类比 | 实际在做什么 |
+|---|---|---|---|
+| 0 | 在 Peano 仓库里 `cmake` + `cmake --build` | 乐高工厂生产**通用零件**，比如 1×2 板（3023）、黑色短摩擦销（2780），装成分包 | 把 Peano 的 C++ 源码编译成静态库 `.a` |
+| 1a | `python3 gauge-wave.py`（前半段 `generate()`） | 设计师设计 42100 这一套：画出**专属零件**的图纸，写好说明书 | Python 生成针对这个问题的 C++ 代码 |
+| 1b | `python3 gauge-wave.py`（后半段 `build()`） | 按图纸压出专属零件，再和通用零件一起**照说明书拼成整车** | 编译生成的代码，和第 0 步的库链接成可执行文件 |
+| 2 | `./gauge-wave` | **开机挖土**：打开 app 遥控挖掘机干活，边挖边拍照 | 真正的数值计算，输出快照 |
+| 3 | `python3 analysis/check.py` | **对照照片检查**：和真 R 9800 的动作比，差多少 | 和精确解比较，算误差、画图 |
+
+最重要的一点：**到 1b 结束为止，一个物理量都还没算过。** 就像挖掘机拼好之前，一铲土都还没挖。
+
+![整个流程的乐高类比](content/img/lego/overview.zh-CN.svg)
+
+*整个流程的类比：工厂生产通用零件 → 设计这一套 → 压零件、拼整车 → 开机挖土 → 对照检查。*
+
+
+---
+
+## 2. 第 0 步：编译 Peano 本体（通用零件）
+
+```bash
+cd peano-minimal
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 8
+```
+
+这一步把 `src/` 下的 `.cpp` 编译成几个静态库，放在 `build/`。完整的 Peano 仓库有几千个 `.cpp`，还要额外打开 `-DENABLE_EXAHYPE=ON -DENABLE_EXAGRYPE=ON -DENABLE_BLOCKSTRUCTURED=ON -DENABLE_LOADBALANCING=ON`；peano-minimal 只包含这个算例需要的代码，不用这些开关。每个库负责一层：
+
+- **Peano4Core**：最底层的网格引擎，负责 spacetree 网格、遍历网格的机制和并行，还包括 `tarch` 里的各种工具函数。
+- **ToolboxBlockStructured / ToolboxLoadBalancing**：把网格单元组织成 patch（例如 9×9×9 的小块），在相邻 patch 之间交换 halo（重叠层），并做负载均衡。
+- **ExaHyPE2Core**：通用的双曲型方程求解框架，负责时间步进的流程和输出快照。它**不知道**你解的是什么方程。
+- **ExaGRyPECore**：CCZ4 方程本身的物理实现，包括通量、源项、非守恒项等。它建立在 ExaHyPE 2 之上。
+
+**特点：**
+
+- 和具体问题**无关**。不管跑 gauge wave、黑洞还是别的，用的都是同一批库。就像 1×2 板和摩擦销，挖掘机、跑车、城堡都要用。
+- 只做一次。只有改了 `peano/src` 里的 **C++** 代码，或者换了编译模式（release / debug），才需要重做。
+- 最慢，在笔记本上大约要十几分钟。
+
+![三种通用零件](content/img/lego/parts.zh-CN.svg)
+
+*三种通用零件（示意图）。第 0 步编译出的库就像它们：不管拼什么都要用。*
+
+---
+
+## 3. 第 1a 步：Python 生成代码（设计这一套）
+
+```python
+peano4_project.generate()
+```
+
+### 为什么要多这一步，不直接写 C++？
+
+Peano 的设计思路是：**把问题的具体参数在编译前就写死进 C++ 代码。** 比如未知量有 59 个、patch 是 9×9×9、halo 宽 3 层，这些都写成常数，编译器就能针对它们优化，比如展开循环、在编译期确定数组大小。
+
+所以 Python 在这里扮演的是**配置语言加代码生成器**：你在 `gauge-wave.py` 里描述"要什么"（CCZ4 方程、FD4 格式、RK4、周期边界、分辨率、结束时间），它替你写出"怎么做"的 C++。
+
+类比：`gauge-wave.py` 是交给乐高设计师的**需求单**："做一台 Liebherr R 9800，要能回转、能挖、能走"。参数（59 个未知量、9×9×9 的 patch、RK4）就是需求单上的比例和配置。设计师把每个尺寸都在说明书里定死，比如这里用 15 孔的梁、那里用 3 单位的销，拼的人就不用现场量。编译器也是这样：尺寸都是已知常数，它就能提前把活安排好。
+
+![需求单交给设计师，画出尺寸全部定死的说明书](content/img/lego/brief.zh-CN.svg)
+
+*左边的需求单就是 `gauge-wave.py` 里的设置；`generate()` 是设计师，把它变成一本说明书，也就是 `code/` 里的 C++。说明书上每个尺寸都已标死：比例、梁的孔数、销的长度、patch 的 9×9×9，编译器拿到的全是常数。*
+
+### 生成了哪些文件
+
+生成的说明书可以拆成下面八个部分，每张卡片对应表格里的一行：
+
+![说明书的八个部分](content/img/lego/booklet.zh-CN.svg)
+
+*从左上到右下依次对应表格各行。`celldata/` 卡片里橙色的孔就是 halo，下面有放大图。*
+
+
+
+| 生成物 | 作用 | 类比 |
+|---|---|---|
+| `Constants.h` | 计算域的位置和大小等常数 | 说明书封面上的尺寸和比例 |
+| `AbstractCCZ4.h/.cpp` | 这次问题专用的求解器类，大小和参数都写死在里面 | 这台挖掘机的底盘和车架设计，尺寸都已定死 |
+| `kernels/` | 数值格式的核心计算：FD4 差分、RK 线性组合等，分 2D 和 3D 两个版本 | 回转机构、动臂和挖斗：真正干活的部分 |
+| `celldata/`、`facedata/` | 每个网格单元和每个面上存什么数据（patch 数组、halo 层），以及并行时怎么打包发送 | 每个模块上装什么，以及两个模块的接合处要预留哪些销孔（halo 就是相邻模块重叠的那几排孔） |
+| `observers/` | Peano 是"遍历网格"驱动的：每个时间步要把网格扫好几遍。这里规定每一遍扫到每个单元或面时做什么，比如算 RK 的某一阶段、更新 halo、输出快照 | 说明书每一页上的步骤 |
+| `repositories/` | 全局状态，以及这些"扫网格"的步骤按什么顺序执行 | 说明书的页码：先拼哪页、后拼哪页 |
+| `gauge-wave-main.cpp` | `main()` 函数：初始化，然后循环推进，直到到达结束时间 | 说明书第 1 页："从这里开始" |
+| `CMakeLists.txt`、`Makefile` | 怎么编译，以及去 `peano/build/` 的哪里找第 0 步的库 | 说明书背面的零件清单：要用哪些分包，去哪里拿 |
+
+表里 `celldata/`、`facedata/` 那一行的 halo 值得放大看一下。网格被切成很多块 patch，每块就像一根 9 孔的梁（一个方向上 9 个格点）。FD4 算靠边的格点时要用到隔壁 patch 的值，所以每根梁两头各多留 3 个孔，每一步开始前先从邻居那里把值抄过来：
+
+![halo：两根梁重叠的那几个孔](content/img/lego/halo.zh-CN.svg)
+
+*灰色是模块 A，蓝色是模块 B，橙色是 halo。箭头表示每一步开始前的“抄值”：A 最后 3 个孔的值抄进 B 左边的 halo，B 前 3 个孔的值抄进 A 右边的 halo。`facedata/` 规定了这些值怎么存、并行时怎么打包发给邻居。*
+
+![传动链：马达、齿轮、离合齿轮、回转台、挖斗](content/img/lego/drive.zh-CN.svg)
+
+*42100 的传动链（示意图）：马达经过齿轮减速和离合齿轮，带动回转台和挖斗。离合齿轮在阻力太大时打滑，保护后面的齿轮。这一串真正干活的零件对应 `kernels/`。*
+
+**特点：** Python 在这一步**只是写文件**，不做任何数值计算。设计师只画图、写说明书，自己不动手拼。
+
+---
+
+## 4. 第 1b 步：编译和链接（压出专属零件，拼成整车）
+
+```python
+peano4_project.build(make_clean_first=True)
+```
+
+它在运行目录里依次做这些事：
+
+1. **`make clean`**：清掉上一次的编译产物，保证这次从头编译。类比：把上次拼好的车拆掉，专属零件也回炉重做。
+2. **`make -j`**：运行目录里的 `Makefile` 只是一层外壳，它会调用 cmake：
+   - **配置**：在 `build.<项目名>/` 里根据 `CMakeLists.txt` 找到第 0 步的库，设置编译选项（release 模式会打开 `-O3` 优化）。`CMakeCache.txt` 等文件就生成在这里。类比：按零件清单把要用的通用分包摆上桌，备好工具。
+   - **编译**：把 1a 生成的每个 `.cpp` 交给编译器（macOS 上是 clang），翻译成目标文件 `.o`。类比：按 1a 的图纸注塑，压出这一套的专属零件。
+   - **链接**：把这些 `.o` 和第 0 步的 `.a` 拼在一起，得到可执行文件。类比：照说明书把专属零件和通用零件拼成整车。
+
+**特点：** 编译器在这一步第一次真正检查代码对不对。1a 里设计错的地方，往往要到 1b 动手拼的时候才发现。
+
+---
+
+## 5. 插曲：`.cpp`、`.o`、`.a` 和链接
+
+这一节解释第 0 步和 1b 里反复出现的文件类型。
+
+![从源码到可执行文件](content/img/lego/chain.zh-CN.svg)
+
+### `.o`：目标文件（object file）
+
+- **怎么来的**：编译器把**一个** `.cpp`（连同它 `#include` 的头文件）翻译成机器码。一个 `.cpp` 对应一个 `.o`。
+- **里面有什么**：
+  - 这个文件里定义的函数，已经是 CPU 能直接执行的指令；
+  - 一张"**我提供什么**"的表，例如"我定义了函数 `CCZ4::flux`"；
+  - 一张"**我还缺什么**"的表，例如"我调用了 `tarch::la::norm`，但它不在我这里"。
+- **为什么不能直接运行**：它只是一个零件，里面还有很多缺的东西没有着落。
+- **类比**：一副模具一次注塑压出来的**一板零件**。一个 `.cpp` 是一副模具，一副模具可以有好几个型腔，一次压出好几种零件；**每个零件就是一个函数**。每个零件上都有凸点和孔：凸点是它能给别的零件用的连接，也就是"我提供什么"；孔要等别的零件插进来才能固定，也就是"我还缺什么"。单独一板零件什么也干不了。
+
+![一副模具一次压出一板零件](content/img/lego/mould.zh-CN.svg)
+
+*一个 `.cpp` 是一副模具，编译一次压出一板零件（一个 `.o`），每个零件是一个函数。凸点是“我提供什么”，孔是“我还缺什么”。*
+
+### `.a`：静态库（archive）
+
+- **怎么来的**：把很多 `.o` **打包**成一个文件（`ar` 命令）。本质上就是一个归档包，`.a` 就是 archive 的意思。
+- 第 0 步生成的就是这种文件。
+- **类比**：**零件分包**。打开乐高的盒子，里面是一袋一袋印着编号的分包；`ar` 打包就是装袋，每个库是一包。不同的是，乐高每个套装各装一份分包，而 Peano 的 `.a` 只装一次，所有算例共用同一批分包。
+
+### 链接：把零件拼成整车
+
+链接器做的事情：
+
+1. 拿到 1b 编译出来的所有 `.o`；
+2. 汇总它们"还缺什么"；
+3. 到第 0 步的 `.a` 里找能提供这些函数的 `.o`，**只拿需要的**；
+4. 新拿进来的 `.o` 可能又缺别的东西，就继续找，直到所有缺口都补上；
+5. 拼成一个能独立运行的可执行文件。
+
+类比：手里拿着一张缺件清单，按顺序打开分包，只取用得上的零件。取出来的零件可能还要配别的销子，那就接着找，直到每个孔都插上了，车也就拼好了。
+
+缺口补不上时，就会出现链接错误：
+
+```
+Undefined symbols for architecture x86_64:
+  "CCZ4::...", referenced from: ...
+```
+
+意思是：有人调用了 CCZ4 的函数，但链接器没被告知去 ExaGRyPE 的库里找。类比：说明书写着"这里插一个零件 X"，翻遍桌上所有分包都找不到 X，多半是有一整包根本没拿出来。
+
+> **库的顺序很重要。** 链接器按顺序翻分包，翻过去的分包不会再回头。ExaGRyPE 的零件要用到 ExaHyPE 2 分包里的零件，所以 ExaGRyPE 要排在 ExaHyPE 2 **前面**，它的缺口才能在后面的分包里补上。
+>
+> 乐高的大分包（上面印着数字）里常常还套着小分包，装的是黑色短摩擦销（2780）、蓝色长摩擦销（6558）这种到处都要用的小零件。Peano 里对应的是最底层的 Tarch（日志、计时、线性代数），几乎每个库都要用，所以它要排在最后，前面所有库缺的销子都能在它那里补齐。CMake 一般会按依赖关系自动排好这个顺序，只有手写链接命令时才要自己操心。
+
+![链接器按顺序翻分包](content/img/lego/bags.zh-CN.svg)
+
+*链接器按顺序翻分包：ExaGRyPE 要用 ExaHyPE 2 的零件，所以排在前面；Tarch 这包销子大家都要用，放在最后。*
+
+### 为什么 1b 也会生成 `.o`？
+
+因为 1a 生成的是**新的 C++ 源码**，而任何 `.cpp` 都必须先编译成 `.o`，链接器只认 `.o` 和 `.a`。
+
+| | 编译谁的 `.cpp` | `.o` 去哪 |
+|---|---|---|
+| 第 0 步 | `peano/src/` 里的通用代码 | 打包成 `.a`，放在 `peano/build/` |
+| 1b | 1a 生成的专用代码 | 留在 `build.<项目名>/CMakeFiles/...`，直接拿去链接 |
+
+用类比来说：第 0 步的分包里只有**通用零件**，比如 3023 和 2780。这台挖掘机独有的**专属零件**得在拼装前按 1a 的图纸先压出来，这就是 1b 的编译。它们只给这一台用，所以直接放在桌上，不用再装进分包（`.a`）。
+
+![线性执行器：收回、伸出，以及装在车上推动动臂和斗杆](content/img/lego/actuator.zh-CN.svg)
+
+*42100 里的线性执行器（伸缩杆，示意图）：马达转动输入轴，杆就伸出或收回，用来推动动臂和斗杆。这种为特定机构准备的零件，就像 1b 编译出来的专属零件。*
+
+### 这样分的意义
+
+1. **省时间**：Peano 有几千个 `.cpp`，打成 `.a` 之后，每跑一个新问题只需要编译 1a 生成的几十个文件，再链接一下，一两分钟就够了。
+2. **分开排错**：
+   - **编译错误**（`unknown type name`、`undeclared identifier`）：某个 `.cpp` 自己写得不对，去查源码。类比：模具本身有问题，零件压不出来。
+   - **链接错误**（`Undefined symbols`）：零件都没问题，但拼的时候缺零件，通常是少链接了某个库，去查 `CMakeLists.txt`。
+3. **静态 vs 动态**：`.a` 是静态库，链接时会把代码**复制进**可执行文件，所以编译好的程序即使删掉 `peano/build/` 也能运行。与之相对的是动态库（macOS 上是 `.dylib`，Linux 上是 `.so`），它们在运行时才加载，所以运行时必须能找到它们。超算上的 MPI 一般是动态库，这也是为什么要先 `module load` 再运行。
+
+   类比：静态库就像梁、销、齿轮这些机械零件，拼的时候已经卡进车里，拼完以后分包袋扔掉也不影响。动态库就像 42100 的 Control+ app：挖掘机里装着 7 个电机和 2 个 Smart Hub，但 app 不在盒子里，要在开机的时候装在手机上、连上 Hub，车才动得起来。手机上没装 app，或者版本对不上，挖掘机就趴着不动，对应程序一启动就报 `Library not loaded`（macOS）或 `error while loading shared libraries`（Linux）。超算上的 `module load` 就像开机前先打开 app、连上 Hub。
+
+   ![静态库和动态库](content/img/lego/app.zh-CN.svg)
+
+   *静态库的代码在链接时就复制进了程序；动态库要等程序启动时才加载，就像开机时才连上的 app。*
+
+### 动手看一看
+
+```bash
+cd peano/build
+find . -name "*.a"                    # 第 0 步生成的所有静态库
+ar t <某个.a> | head                  # 库里打包了哪些 .o
+nm -C <某个.a> | grep " T " | head    # T：这个库"提供"的函数
+nm -C <某个.a> | grep " U " | head    # U：这个库"还缺"的函数（undefined）
+```
+
+---
+
+## 6. 第 2 步和第 3 步：运行和分析
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # 结果写到仓库外面（可选，见第 10 节）
+cd peano-minimal/example
+python3 gauge-wave.py --points 27 --run    # 1a + 1b + 2
+python3 analysis/check.py --points 27               # 3
+```
+
+- 加了 `--run`，`gauge-wave.py` 编译完就运行程序。程序把网格遍历一遍又一遍，推进到 t = 1，把快照 `solution-CCZ4*.peano-patch-file` 写到工作目录的 `raw_data/n27/`（设了 `GAUGE_WAVE_WORK_DIR` 就在那里，否则在 `example/` 里），屏幕输出同时存进那里的 `run.log`。在笔记本上单线程大约 90 秒。
+- `check.py` 读取快照，把 lapse 和精确解 $\alpha(x,t) = \sqrt{1 - A\sin\big(2\pi(x-t)\big)}$（$A = 0.1$）比较，输出误差，并把 CSV 和两张图 `check-centre.png`、`check-profile.png` 写到 `data/n27/`。
+- **参考结果**：27 点、RK4、t = 1 时，lapse 最大误差约 **5e-5**。
+- 同一份代码在 9、27、81 三种网格上跑，再一起分析收敛阶，见教程《收敛性分析》。
+
+类比：第 2 步是打开 app 开着挖掘机干一整轮活（推进到 t = 1），每隔一段时间拍一张照片（快照）。第 3 步是把照片和真 R 9800 的标准动作对照，看每个位置差多少（和精确解比）。
+
+![开机挖土，边挖边拍快照](content/img/lego/dig.zh-CN.svg)
+
+*第 2 步开机挖土，每隔一段时间拍一张快照；第 3 步拿快照和真挖掘机对照。*
+
+![真实的 Liebherr R 9200 矿用挖掘机](content/img/photos/liebherr-r9200.jpg)
+
+*真实的 Liebherr R 9200 矿用挖掘机（R 9800 的同系列机型），摄于 bauma 2016。在类比里它就是“精确解”：模型做得好不好，要和它比。照片：Neuwieser，[CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/)，来自 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Bauma_2016_%2826667207701%29.jpg)。*
+
+---
+
+## 7. 完整操作流程
+
+```bash
+# --- 第 0 步：环境和 Peano 本体（只做一次） ---
+cd peano-minimal
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt       # 包括 cmake
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 8
+
+# --- 第 1、2 步：生成、编译、运行 ---
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # 可选：生成的文件写到仓库外面
+cd example
+python3 gauge-wave.py --points 27 --run 2>&1 | tee build.log
+
+# --- 第 3 步：分析 ---
+python3 analysis/check.py --points 27
+```
+
+`gauge-wave.py` 里有两个关键路径：
+
+- `exahype2.api.Project(..., directory=<工作目录>/code)`：生成的代码和可执行文件放在这里；
+- `project.set_Peano4_installation(<peano-minimal 的绝对路径>, build_mode)`：告诉生成的 `CMakeLists.txt` 去哪里找第 0 步的库。
+
+不设 `GAUGE_WAVE_WORK_DIR` 时，生成的 `code/`、`raw_data/`、`data/` 都在 `example/` 里，并且写进了 `.gitignore`，所以跑多少次仓库都保持干净。这三个目录都只属于这一次模拟设置（只有 `build/` 是所有模拟共用的），想放到仓库外面，比如超算的 scratch 目录，就设一次环境变量 `export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave`，三个脚本都会用它，命令不用改；只想对一条命令生效就用 `--work-dir`。类比：同一套 42100 的零件盒（`build/`）留在家里，每次搭出来的挖掘机和它挖的土（`code/`、`raw_data/`、`data/`）都搬到另一间屋子，换一个设置就换一间屋子。
+
+---
+
+## 8. 改了什么，要重做哪一步
+
+| 你改了 | 需要重做 |
+|---|---|
+| `peano/src` 里的 C++ | 0 → 1b → 2 |
+| `peano/src` 里的 Python（代码生成器） | 1a → 1b → 2 |
+| `gauge-wave.py` 里的参数（分辨率、结束时间等） | 1a → 1b → 2 |
+| 只改了分析脚本 | 3 |
+| 什么都没改，只想再跑一次 | 2 |
+
+---
+
+## 9. 出错了去哪找
+
+看报错出现在哪个阶段，就知道问题大概在哪：
+
+| 报错出现在 | 典型样子 | 问题通常在 |
+|---|---|---|
+| 1a（Python） | `AttributeError`、`ImportError` | 代码生成器（`peano/src` 下的 Python），或者你的脚本 |
+| 1b 编译 | `unknown type name`、`use of undeclared identifier` | 1a 生成的 C++ 不完整（例如漏了 `#include`） |
+| 1b 链接 | `Undefined symbols` | 少链接了某个库，或者库的顺序不对，去查 `CMakeLists.txt` |
+| 2 运行 | 断言失败、NaN、崩溃 | 数值或物理问题 |
+
+注意：**出错的阶段和报错的阶段不一定相同。** 1a 生成的文件有缺陷时，Python 不会报错，要到 1b 编译或链接时才暴露。下面是一个真实例子：某个版本的代码里有三个生成器 bug，它们都出在 1a，却分别在三个不同的地方报错：
+
+| Bug | 出错在 | 报错在 |
+|---|---|---|
+| FD4 格式缺少 `halo_size` 属性 | 1a（需求单少填了一项） | 1a，Python 直接 `AttributeError`（设计师当场退回需求单） |
+| 生成 kernel 头文件时漏写 `#include` | 1a（说明书某一页漏印了这一步要用的零件） | 1b 编译（拼到这一页才发现不知道该用哪些零件） |
+| `CMakeLists.txt` 模板没有链接 ExaGRyPE 库 | 1a（零件清单漏写了一个分包） | 1b 链接（拼到最后发现缺件） |
+
+---
+
+## 10. 文件该怎么组织
+
+### 先分清"一次性的"和"有价值的"
+
+| 类型 | 哪步生成 | 再跑一次 1a+1b 时会怎样 |
+|---|---|---|
+| 生成的 C++ 代码 | 1a | 被 1a **覆盖** |
+| 编译产物（`.o`、可执行文件） | 1b | 被 `make clean` **清掉**，再重新编译 |
+| 模拟结果 | 2 | 不受影响，但下次运行会用**同样的文件名**覆盖它们 |
+| 处理后的数据 | 3 | 不受影响，但同样可能被覆盖 |
+
+- 代码和编译产物随时可以重新生成，是**一次性的**。
+- 模拟结果和处理后的数据才是**有价值的**。
+
+类比：`code/` 是拼装台，每次开工前清空；`raw_data/` 是每次开机挖土拍下的照片；`data/` 是对照照片得出的检查结果。拼装台可以随时清，照片和检查结果要好好收着。
+
+### peano-minimal 的布局
+
+刚克隆下来、一步都还没跑的时候，只有框架源码和你写的脚本：
+
+![跑之前的文件结构](diagrams/static/files-before.zh-CN.png)
+
+设了 `GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave`，跑完 9、27、81 三组和分析以后：仓库里只多了 `build/`，`code/`、`raw_data/`、`data/` 都在工作目录里：
+
+![跑完三组以后的文件结构](diagrams/static/files-after.zh-CN.png)
+
+*不设这个变量时，工作目录下的三个目录会出现在 `example/` 里，结构相同，并且都写在 .gitignore 里。交互版可以折叠、展开：[跑之前](view.html#files-before)、[跑完以后](view.html#files-after)。*
+
+几点说明：
+
+- **生成代码和编译产物不要拆开。** Peano 把生成的代码、`CMakeLists.txt` 和 `Makefile` 都写进同一个目录，编译也在这个目录里进行，硬拆开就是和框架对着干。
+- **结果和数据按运行分。** 文件名是固定的（每次都叫 `solution-CCZ4.peano-patch-file`），不分开的话，后一次运行会覆盖前一次。在超算上，每个作业天然就有自己的目录，所以通常不会遇到这个问题。
+- **每次 1a 之前先清空 `code/`。** 1a 只覆盖它这次生成的文件，上次生成过、这次不再生成的文件会残留下来；某些版本的生成器还会往旧的 kernel 文件后面追加内容。`gauge-wave.py` 会自动做这一步。
+- **生成的文件不要提交到 git。** 它们都写在 `.gitignore` 里，只有你自己写的脚本进版本管理。注意 `git clean -fdx` 会把被忽略的文件也删掉，模拟结果会跟着一起没了。
+- **iCloud**：如果项目放在 iCloud 同步的目录里（比如"文稿"），克隆时把目录名取成以 `.nosync` 结尾，例如 `peano-minimal.nosync`。这样 iCloud 不会同步它，重新生成几百个文件时也就不会出现 “xxx 2” 这样的冲突副本。
+</script>
+<script type="text/markdown" id="md-en">
+# From a Python script to simulation results: how an ExaGRyPE gauge wave run works
+
+This tutorial is for people who are new to Peano / ExaHyPE 2 / ExaGRyPE. It does not cover the physics of CCZ4. It explains one thing:
+**what happens between the first command and the final lapse error, which files each step produces, and where to look when something goes wrong.**
+
+The example is the gauge wave test: the CCZ4 equations, fourth-order central differences (FD4) with RK4 time integration, periodic boundaries, 27 grid points per direction, run for one period (t = 1).
+
+The commands are for peano-minimal, a trimmed copy of Peano that contains only the code this example uses. Where the text says `peano/src` or `peano/build`, peano-minimal has `src/` and `build/`; the ideas apply to the full Peano repository as well.
+
+---
+
+## 1. The big picture: four steps
+
+Think of it as **building LEGO Technic set 42100 (the Liebherr R 9800 remote-controlled excavator) and then digging with it**. The set has 4,108 pieces, 7 motors and 2 Smart Hubs, and you drive it with the Control+ app on a phone:
+
+| Step | Command | Analogy | What actually happens |
+|---|---|---|---|
+| 0 | `cmake` + `cmake --build` in the Peano repository | The LEGO factory makes **standard parts**, such as the 1×2 plate (3023) and the black short friction pin (2780), and packs them into bags | Peano's C++ sources are compiled into static libraries (`.a`) |
+| 1a | `python3 gauge-wave.py` (first half, `generate()`) | A designer designs set 42100: drawings for its **set-specific parts**, and the building instructions | Python generates C++ code specific to this problem |
+| 1b | `python3 gauge-wave.py` (second half, `build()`) | The set-specific parts are moulded from the drawings, then **built into the excavator** together with the standard parts, following the instructions | The generated code is compiled and linked with the step 0 libraries into an executable |
+| 2 | `./gauge-wave` | **Switch on and dig**: drive the excavator from the app and take photos as it works | The actual numerical computation; snapshots are written |
+| 3 | `python3 analysis/check.py` | **Check the photos**: how far is each move from the real R 9800? | Compare with the exact solution, compute errors, plot |
+
+The key point: **up to the end of 1b, not a single physical quantity has been computed**, just as no soil has been moved before the excavator is built.
+
+![The LEGO analogy for the whole pipeline](content/img/lego/overview.en.svg)
+
+*The analogy for the whole pipeline: the factory makes standard parts → design the set → mould and build → switch on and dig → check.*
+
+---
+
+## 2. Step 0: build Peano itself (the standard parts)
+
+```bash
+cd peano-minimal
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 8
+```
+
+This compiles the `.cpp` files under `src/` into a few static libraries in `build/`. The full Peano repository has thousands of `.cpp` files and also needs `-DENABLE_EXAHYPE=ON -DENABLE_EXAGRYPE=ON -DENABLE_BLOCKSTRUCTURED=ON -DENABLE_LOADBALANCING=ON`; peano-minimal contains only what this example needs, so it does not use these switches. Each library is one layer:
+
+- **Peano4Core**: the grid engine at the bottom. Spacetree grids, the mechanism for traversing them, parallelism, and the utilities in `tarch`.
+- **ToolboxBlockStructured / ToolboxLoadBalancing**: groups grid cells into patches (for example 9×9×9 blocks), exchanges halos (overlap layers) between neighbouring patches, and balances the load.
+- **ExaHyPE2Core**: a generic framework for hyperbolic PDEs. It handles time stepping and snapshot output, and it does **not** know which equations you solve.
+- **ExaGRyPECore**: the physics of the CCZ4 equations: fluxes, sources, non-conservative products. It is built on top of ExaHyPE 2.
+
+**In short:**
+
+- It is **independent** of the problem. A gauge wave, a black hole or anything else uses the same libraries, just as excavators, sports cars and castles all use 1×2 plates and friction pins.
+- You do it once. Redo it only after changing **C++** code in `peano/src`, or when switching build mode (release / debug).
+- It is the slowest step, around ten minutes or more on a laptop.
+
+![Three standard parts](content/img/lego/parts.en.svg)
+
+*Three standard parts (sketch). The libraries from step 0 are like them: whatever you build, you need them.*
+
+---
+
+## 3. Step 1a: Python generates code (designing the set)
+
+```python
+peano4_project.generate()
+```
+
+### Why not write the C++ directly?
+
+Peano's design is to **bake the specifics of your problem into the C++ code before it is compiled.** For example, 59 unknowns, 9×9×9 patches and a halo of 3 layers all become constants, so the compiler can optimise for them: unroll loops, size arrays at compile time.
+
+So Python acts as a **configuration language and code generator**. In `gauge-wave.py` you describe *what* you want (CCZ4, FD4, RK4, periodic boundaries, resolution, end time), and it writes the C++ that does it.
+
+Analogy: `gauge-wave.py` is the **brief** handed to the LEGO designer: "a Liebherr R 9800 that can slew, dig and drive". The parameters (59 unknowns, 9×9×9 patches, RK4) are the scale and options in the brief. The designer fixes every dimension in the instructions (a 15-hole beam here, a 3-long pin there), so whoever builds it never has to measure. The compiler is in the same position: when every size is a known constant, it can plan the work in advance.
+
+![The brief goes to the designer, who draws a booklet with every size fixed](content/img/lego/brief.en.svg)
+
+*The brief on the left is the set-up in `gauge-wave.py`; `generate()` is the designer, who turns it into a booklet: the C++ in `code/`. Every size in the booklet is fixed: the scale, the number of holes in a beam, the length of a pin, the 9×9×9 patch. The compiler sees only constants.*
+
+### Which files it generates
+
+The generated booklet comes in eight parts; each card matches one row of the table:
+
+![The eight parts of the booklet](content/img/lego/booklet.en.svg)
+
+*Left to right, top to bottom, they follow the rows of the table. The orange holes on the `celldata/` card are the halo, enlarged below.*
+
+
+
+| Generated | Purpose | Analogy |
+|---|---|---|
+| `Constants.h` | Constants such as the position and size of the domain | Scale and dimensions on the cover of the instructions |
+| `AbstractCCZ4.h/.cpp` | A solver class for this problem, with sizes and parameters fixed | The chassis and frame of this excavator, with every size fixed |
+| `kernels/` | The core numerical kernels: FD4 differences, RK linear combinations, in 2D and 3D versions | The slewing ring, boom and bucket: the parts that do the work |
+| `celldata/`, `facedata/` | What each cell and face stores (patch arrays, halo layers), and how it is packed for parallel exchange | What goes into each module, and which pin holes to leave free where two modules join (the halo is the rows of holes where neighbouring modules overlap) |
+| `observers/` | Peano is driven by grid traversals: every time step sweeps the grid several times. These files say what to do at each cell or face during each sweep, for example one RK stage, a halo update, or writing a snapshot | The steps on each page of the instructions |
+| `repositories/` | Global state and the order in which the sweeps run | The page numbers: which page to build first |
+| `gauge-wave-main.cpp` | `main()`: initialise, then loop until the end time | Page 1 of the instructions: "start here" |
+| `CMakeLists.txt`, `Makefile` | How to compile, and where in `peano/build/` to find the step 0 libraries | The parts list at the back of the instructions: which bags to use and where to get them |
+
+The halo in the `celldata/` and `facedata/` row is worth a closer look. The grid is cut into many patches, each like a 9-hole beam (9 grid points along one direction). FD4 needs values from the next patch to update the points near the edge, so every beam keeps 3 extra holes at each end and copies their values from its neighbour before every step:
+
+![The halo: the holes where two beams overlap](content/img/lego/halo.en.svg)
+
+*Grey is module A, blue is module B, orange is the halo. The arrows are the copy before every step: the values of A's last 3 holes go into B's left halo, and B's first 3 holes go into A's right halo. `facedata/` says how these values are stored and packed for the neighbour in parallel runs.*
+
+![The drive train: motor, gears, clutch gear, turntable, bucket](content/img/lego/drive.en.svg)
+
+*The drive train of 42100 (sketch): the motor drives the turntable and the bucket through a reduction and a clutch gear, which slips under overload to protect the gears behind it. These working parts are what `kernels/` is.*
+
+**In short:** in this step Python **only writes files**. It does no numerical work. The designer only draws and writes instructions, and builds nothing.
+
+---
+
+## 4. Step 1b: compile and link (mould the set-specific parts, build the excavator)
+
+```python
+peano4_project.build(make_clean_first=True)
+```
+
+In the run directory it does the following:
+
+1. **`make clean`**: removes the previous build products, so this build starts from scratch. Analogy: take the last excavator apart and remould its set-specific parts.
+2. **`make -j`**: the `Makefile` in the run directory is only a wrapper around cmake:
+   - **Configure**: in `build.<project name>/`, cmake reads `CMakeLists.txt`, finds the step 0 libraries and sets compiler options (release mode turns on `-O3`). `CMakeCache.txt` and friends are created here. Analogy: put the standard bags from the parts list on the table and get the tools ready.
+   - **Compile**: each `.cpp` generated in 1a goes to the compiler (clang on macOS) and becomes an object file `.o`. Analogy: mould the set-specific parts from the 1a drawings.
+   - **Link**: the `.o` files and the step 0 `.a` libraries are joined into the executable. Analogy: follow the instructions and build the set-specific and standard parts into one excavator.
+
+**In short:** this is the first time a compiler checks the code. A design mistake from 1a often shows up only now, when you start building.
+
+---
+
+## 5. Interlude: `.cpp`, `.o`, `.a` and linking
+
+This section explains the file types that keep appearing in step 0 and step 1b.
+
+![From source to executable](content/img/lego/chain.en.svg)
+
+### `.o`: object file
+
+- **Where it comes from**: the compiler translates **one** `.cpp` file (together with the headers it `#include`s) into machine code. One `.cpp` gives one `.o`.
+- **What is inside**:
+  - the functions defined in that file, already as instructions the CPU can execute;
+  - a table of **what I provide**, for example "I define the function `CCZ4::flux`";
+  - a table of **what I still need**, for example "I call `tarch::la::norm`, but it is not here".
+- **Why it cannot run on its own**: it is a single part, and many of the things it needs are still missing.
+- **Analogy**: **one shot from one mould**. A `.cpp` file is a mould; a mould can have several cavities, so one shot produces several different parts, and **each part is one function**. Every part has studs and holes: the studs are connections it offers to other parts ("what I provide"), and the holes only hold once another part is pushed in ("what I still need"). One shot of parts on its own does nothing.
+
+![One shot from one mould](content/img/lego/mould.en.svg)
+
+*A `.cpp` file is a mould; compiling it is one shot that produces a set of parts (one `.o`), and each part is a function. Studs are “what I provide”, holes are “what I still need”.*
+
+### `.a`: static library (archive)
+
+- **Where it comes from**: many `.o` files **packed** into one file with the `ar` command. It really is just an archive; `.a` stands for archive.
+- Step 0 produces files of this kind.
+- **Analogy**: the **numbered bags** inside a LEGO box. `ar` packs the bags, one library per bag. The difference: every LEGO set comes with its own bags, whereas Peano packs its `.a` files once and every simulation shares them.
+
+### Linking: building the excavator
+
+The linker:
+
+1. takes all the `.o` files compiled in 1b;
+2. collects everything they still need;
+3. looks in the step 0 `.a` files for `.o` files that provide those functions, and **takes only what is needed**;
+4. the `.o` files it takes in may need further things, so it keeps looking until nothing is missing;
+5. joins everything into one executable that runs on its own.
+
+Analogy: with a list of missing parts in your hand you open the bags in order and take only the parts you need. A part you take out may need yet another pin, so you keep looking until every hole is filled, and then the excavator is complete.
+
+If something cannot be found, you get a link error:
+
+```
+Undefined symbols for architecture x86_64:
+  "CCZ4::...", referenced from: ...
+```
+
+It means: somebody calls a CCZ4 function, but the linker was not told to look in the ExaGRyPE library. Analogy: the instructions say "put part X here", but none of the bags on the table contains X, most likely because a whole bag was never taken out of the box.
+
+> **Library order matters.** The linker goes through the bags in order and never goes back to a bag it has passed. ExaGRyPE's parts need parts from the ExaHyPE 2 bag, so ExaGRyPE must come **before** ExaHyPE 2; then its gaps can be filled from the bags after it.
+>
+> A big numbered LEGO bag often contains small bags of tiny parts that are needed everywhere, such as black short friction pins (2780) and blue long friction pins (6558). Peano's counterpart is the lowest layer, Tarch (logging, timing, linear algebra). Almost every library needs it, so it goes last, where it can supply the pins every library before it is missing. CMake usually works this order out from the dependencies; you only have to think about it when you write link commands by hand.
+
+![The linker opens the bags in order](content/img/lego/bags.en.svg)
+
+*The linker opens the bags in order: ExaGRyPE needs parts from ExaHyPE 2, so it comes first; every bag needs the Tarch pins, so that bag comes last.*
+
+### Why does step 1b produce `.o` files too?
+
+Because 1a produced **new C++ source code**, and every `.cpp` has to become a `.o` first. The linker only accepts `.o` and `.a` files.
+
+| | Compiles which `.cpp` | Where the `.o` goes |
+|---|---|---|
+| Step 0 | The generic code in `peano/src/` | Packed into `.a` files in `peano/build/` |
+| 1b | The problem-specific code generated in 1a | Stays in `build.<project name>/CMakeFiles/...` and goes straight to the linker |
+
+In terms of the analogy: the step 0 bags only hold **standard parts**, such as 3023 and 2780. The **set-specific parts** of this excavator have to be moulded from the 1a drawings before you build; that is the compile part of 1b. They are used by this one excavator only, so they go straight onto the table instead of into a bag (`.a`).
+
+![Linear actuators: retracted, extended, and on the machine pushing the boom and the stick](content/img/lego/actuator.en.svg)
+
+*The linear actuators of 42100 (sketch): turning the input axle extends or retracts the rod, which pushes the boom and the stick. Parts made for one specific mechanism like these are the set-specific parts that 1b compiles.*
+
+### Why split things this way
+
+1. **It saves time**: Peano has thousands of `.cpp` files. Once they are in `.a` files, a new problem only needs the few dozen files generated in 1a to be compiled and then linked, which takes a minute or two.
+2. **It separates errors**:
+   - **Compile errors** (`unknown type name`, `undeclared identifier`): a `.cpp` file itself is wrong. Look at the source. Analogy: the mould itself is faulty and the part cannot be made.
+   - **Link errors** (`Undefined symbols`): every part is fine, but a part is missing during assembly, usually a library that was not linked. Look at `CMakeLists.txt`.
+3. **Static vs dynamic**: a `.a` file is a static library. Linking **copies** its code into the executable, so the finished program runs even after `peano/build/` is deleted. Dynamic libraries (`.dylib` on macOS, `.so` on Linux) are loaded at run time, so they must be found when the program starts. MPI on a supercomputer is usually a dynamic library, which is why you `module load` it before running.
+
+   Analogy: static libraries are like beams, pins and gears; they are clicked into the excavator while you build it, and once it is built you can throw the empty bags away. A dynamic library is like 42100's Control+ app. The excavator holds 7 motors and 2 Smart Hubs, but the app is not in the box: you install it on a phone and connect it to the hubs when you switch on. Without the app, or with a version that does not match, the excavator sits still; that is the program stopping at start-up with `Library not loaded` (macOS) or `error while loading shared libraries` (Linux). `module load` on a supercomputer is opening the app and connecting to the hubs before you start.
+
+   ![Static and dynamic libraries](content/img/lego/app.en.svg)
+
+   *A static library's code is copied into the program at link time; a dynamic library is only loaded when the program starts, like the app you connect at switch-on.*
+
+### Try it yourself
+
+```bash
+cd peano/build
+find . -name "*.a"                    # all static libraries from step 0
+ar t <some.a> | head                  # which .o files are packed inside
+nm -C <some.a> | grep " T " | head    # T: functions this library provides
+nm -C <some.a> | grep " U " | head    # U: functions this library still needs (undefined)
+```
+
+---
+
+## 6. Steps 2 and 3: run and analyse
+
+```bash
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # results outside the repository (optional, see section 10)
+cd peano-minimal/example
+python3 gauge-wave.py --points 27 --run    # 1a + 1b + 2
+python3 analysis/check.py --points 27               # 3
+```
+
+- With `--run`, `gauge-wave.py` starts the program right after building it. The program sweeps the grid again and again until t = 1 and writes the snapshots `solution-CCZ4*.peano-patch-file` to `raw_data/n27/` in the work folder (`$GAUGE_WAVE_WORK_DIR` if set, otherwise `example/`), together with a copy of its screen output in `run.log`. About 90 seconds on one core of a laptop.
+- `check.py` reads the snapshots, compares the lapse with the exact solution $\alpha(x,t) = \sqrt{1 - A\sin\big(2\pi(x-t)\big)}$ ($A = 0.1$), prints the error, and writes CSV files and the plots `check-centre.png` and `check-profile.png` to `data/n27/`.
+- **Reference result**: with 27 points and RK4, the maximum lapse error at t = 1 is about **5e-5**.
+- Running the same code on 9, 27 and 81 points and measuring the order of convergence is the topic of the tutorial *Convergence study*.
+
+Analogy: step 2 is switching on the app and putting the excavator through a full work cycle (up to t = 1), taking a photo every so often (the snapshots). Step 3 is holding the photos against the real R 9800's standard moves and measuring how far off each position is (comparing with the exact solution).
+
+![Switch on and dig, taking snapshots](content/img/lego/dig.en.svg)
+
+*Step 2: switch on and dig, taking a snapshot every so often. Step 3: hold the snapshots against the real excavator.*
+
+![A real Liebherr R 9200 mining excavator](content/img/photos/liebherr-r9200.jpg)
+
+*A real Liebherr R 9200 mining excavator (a sister model of the R 9800) at bauma 2016. In the analogy it is the “exact solution” every model is compared with. Photo: Neuwieser, [CC BY-SA 2.0](https://creativecommons.org/licenses/by-sa/2.0/), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Bauma_2016_%2826667207701%29.jpg).*
+
+---
+
+## 7. All the commands
+
+```bash
+# --- Step 0: environment and Peano itself (once) ---
+cd peano-minimal
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt       # includes cmake
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 8
+
+# --- Steps 1 and 2: generate, build, run ---
+export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave   # optional: generated files outside the repository
+cd example
+python3 gauge-wave.py --points 27 --run 2>&1 | tee build.log
+
+# --- Step 3: analyse ---
+python3 analysis/check.py --points 27
+```
+
+`gauge-wave.py` uses two important paths:
+
+- `exahype2.api.Project(..., directory=<work folder>/code)`: generated code and the executable go here;
+- `project.set_Peano4_installation(<absolute path to peano-minimal>, build_mode)`: tells the generated `CMakeLists.txt` where to find the step 0 libraries.
+
+Without `GAUGE_WAVE_WORK_DIR`, the generated `code/`, `raw_data/` and `data/` all live in `example/` and are listed in `.gitignore`, so the repository stays clean however often you run. All three belong to this one simulation set-up (only `build/` is shared by every simulation). To keep them outside the repository, for example on a cluster's scratch file system, set an environment variable once, `export GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave`; all three scripts use it and the commands stay the same. `--work-dir` does the same for a single command. Analogy: the 42100 parts boxes (`build/`) stay at home, while each excavator you build and the earth it digs (`code/`, `raw_data/`, `data/`) go to another room, one room per set-up.
+
+---
+
+## 8. What to redo after a change
+
+| You changed | Redo |
+|---|---|
+| C++ in `peano/src` | 0 → 1b → 2 |
+| Python in `peano/src` (the code generator) | 1a → 1b → 2 |
+| Parameters in `gauge-wave.py` (resolution, end time, …) | 1a → 1b → 2 |
+| Only the analysis script | 3 |
+| Nothing, you just want to run again | 2 |
+
+---
+
+## 9. Where to look when something fails
+
+The step in which the error appears tells you roughly where the problem is:
+
+| Error appears in | Typical message | Problem is usually in |
+|---|---|---|
+| 1a (Python) | `AttributeError`, `ImportError` | The code generator (Python under `peano/src`) or your script |
+| 1b compile | `unknown type name`, `use of undeclared identifier` | The C++ generated in 1a is incomplete (for example a missing `#include`) |
+| 1b link | `Undefined symbols` | A library is not linked, or the library order is wrong. Check `CMakeLists.txt` |
+| 2 run | Assertion failures, NaN, crashes | Numerics or physics |
+
+Note: **the step where a bug lives is not always the step where it is reported.** If 1a writes a faulty file, Python stays quiet and the problem shows up only in 1b, at compile or link time. A real example: one version of the code had three generator bugs. All three live in 1a, but each is reported somewhere else:
+
+| Bug | Lives in | Reported in |
+|---|---|---|
+| The FD4 scheme lacks a `halo_size` attribute | 1a (a field of the brief is left empty) | 1a, Python raises `AttributeError` (the designer hands the brief straight back) |
+| Generated kernel headers miss their `#include` lines | 1a (one page of the instructions does not show the parts for that step) | 1b compile (you only notice at that page, when you do not know which parts to use) |
+| The `CMakeLists.txt` template does not link the ExaGRyPE library | 1a (the parts list forgets one bag) | 1b link (parts are missing at the very end) |
+
+---
+
+## 10. How to organise the files
+
+### Separate what is disposable from what is valuable
+
+| Type | Produced by | When you run 1a + 1b again |
+|---|---|---|
+| Generated C++ code | 1a | **Overwritten** by 1a |
+| Build products (`.o`, executable) | 1b | **Removed** by `make clean`, then rebuilt |
+| Simulation results | 2 | Untouched, but the next run writes files with **the same names** and overwrites them |
+| Processed data | 3 | Untouched, but can be overwritten in the same way |
+
+- Code and build products can be regenerated at any time. They are **disposable**.
+- Simulation results and processed data are what is **valuable**.
+
+Analogy: `code/` is the building table, cleared before each build; `raw_data/` holds the photos from each digging session; `data/` holds what you found by checking them. Clear the table whenever you like, but keep the photos and the findings.
+
+### The layout in peano-minimal
+
+Fresh from GitHub, before any step has run, there is only the framework source and your scripts:
+
+![Files before running](diagrams/static/files-before.en.png)
+
+With `GAUGE_WAVE_WORK_DIR=~/sims/gauge-wave` set, after the 9-, 27- and 81-point runs and the analysis the repository gains only `build/`, and `code/`, `raw_data/`, `data/` are in the work folder:
+
+![Files after the three runs](diagrams/static/files-after.en.png)
+
+*Without the variable, the three work-folder folders appear inside `example/` with the same structure, covered by .gitignore. The interactive versions can fold and unfold folders: [before](view.html#files-before), [after](view.html#files-after).*
+
+Notes:
+
+- **Do not split generated code from build products.** Peano writes the generated code, `CMakeLists.txt` and `Makefile` into one directory and builds there. Splitting them means fighting the framework.
+- **Keep results and data per run.** File names are fixed (always `solution-CCZ4.peano-patch-file`), so without separate folders the next run overwrites the previous one. On a supercomputer every job has its own directory anyway, so this rarely comes up there.
+- **Empty `code/` before every 1a.** 1a only overwrites the files it generates this time; files from an earlier generation that are no longer generated stay behind. Some versions of the generator also append to old kernel files. `gauge-wave.py` does this for you.
+- **Do not commit generated files.** They are all listed in `.gitignore`; only your own scripts go under version control. Note that `git clean -fdx` also deletes ignored files, simulation results included.
+- **iCloud**: if the project sits in a folder that iCloud syncs (such as Documents), give the clone a name ending in `.nosync`, e.g. `peano-minimal.nosync`. iCloud then leaves it alone and does not create conflict copies such as "xxx 2" when hundreds of files are regenerated.
+</script>
+<script>
+  // Formulas: $...$ inline and $$...$$ display, rendered by MathJax as SVG (no fonts or stylesheets needed).
+  window.MathJax = {
+    tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+    svg: { fontCache: "global" },
+    startup: { typeset: false }
+  };
+</script>
+<script src="vendor/mathjax-tex-svg.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script>
+  var SITE_TITLE = {"zh-CN": "Peano 学习图册", "en": "Peano Notebook"};
+  var TITLES = {"zh-CN": "从 Python 脚本到模拟结果", "en": "From a Python script to simulation results"};
+
+  function render() {
+    var lang = SiteLang.get();
+    var article = document.getElementById("article");
+    var toc = document.getElementById("toc");
+    var list = document.getElementById("toc-list");
+    document.title = TITLES[lang] + " · " + SITE_TITLE[lang];
+    if (!window.marked) {
+      article.innerHTML = "<p class='status'>" + (lang === "en" ? "Could not load the Markdown renderer. Check the network connection and reload." : "Markdown 渲染器没有载入。请检查网络后刷新页面。") + "</p>";
+      return;
+    }
+    // Take the formulas out before Markdown sees them (it would eat _ and \), outside code only.
+    var maths = [];
+    var parts = document.getElementById("md-" + lang).textContent.split(/(```[\s\S]*?```|`[^`\n]*`)/);
+    function keep(open, close) {
+      return function (m, tex) { maths.push(open + tex + close); return "@@MATH" + (maths.length - 1) + "@@"; };
+    }
+    for (var i = 0; i < parts.length; i += 2) {
+      parts[i] = parts[i].replace(/\$\$([\s\S]+?)\$\$/g, keep("\\[", "\\]"))
+                         .replace(/\$([^$\n]+?)\$/g, keep("\\(", "\\)"));
+    }
+    var html = marked.parse(parts.join(""));
+    article.innerHTML = html.replace(/@@MATH(\d+)@@/g, function (m, k) {
+      return maths[+k].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    });
+
+    // Wide tables scroll inside their own box instead of widening the page.
+    article.querySelectorAll("table").forEach(function (tb) {
+      var box = document.createElement("div");
+      box.className = "table-scroll";
+      tb.replaceWith(box);
+      box.appendChild(tb);
+    });
+
+    // A copy button in the top-right corner of every code block.
+    article.querySelectorAll("pre").forEach(function (pre) {
+      var box = document.createElement("div");
+      box.className = "code-box";
+      pre.replaceWith(box);
+      box.appendChild(pre);
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "copy-btn";
+      box.appendChild(btn);
+      label(btn, false);
+      btn.addEventListener("click", function () {
+        var code = pre.querySelector("code") || pre;
+        copyText(code.textContent.replace(/\n$/, "")).then(function (ok) {
+          label(btn, ok ? "done" : "fail");
+          setTimeout(function () { label(btn, false); }, 1600);
+        });
+      });
+    });
+
+    // Contents list from the h2 headings, placed after the title and opening paragraphs.
+    list.innerHTML = "";
+    article.querySelectorAll("h2").forEach(function (h, i) {
+      h.id = "s" + (i + 1);
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "#" + h.id;
+      a.textContent = h.textContent.replace(/^\d+\.\s*/, "");
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    toc.hidden = !list.children.length;
+    var anchor = article.querySelector("h1");
+    while (anchor && anchor.nextElementSibling && anchor.nextElementSibling.tagName === "P") anchor = anchor.nextElementSibling;
+    if (anchor) anchor.after(toc);
+    typeset(article);
+  }
+
+  var COPY = {
+    "zh-CN": { idle: "复制", done: "已复制", fail: "复制失败" },
+    "en": { idle: "Copy", done: "Copied", fail: "Copy failed" }
+  };
+  function label(btn, state) {
+    var words = COPY[SiteLang.get()] || COPY.en;
+    btn.textContent = words[state || "idle"];
+    btn.setAttribute("aria-label", words[state || "idle"]);
+    btn.classList.toggle("done", state === "done");
+  }
+  function copyText(text) {
+    function fallback() {
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      area.remove();
+      return ok;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallback(); });
+    }
+    return Promise.resolve(fallback());
+  }
+  document.addEventListener("langchange", function () {
+    document.querySelectorAll(".copy-btn").forEach(function (b) { label(b, false); });
+  });
+
+  function typeset(el) {
+    if (!window.MathJax || !MathJax.startup || !MathJax.startup.promise) return;
+    MathJax.startup.promise = MathJax.startup.promise
+      .then(function () { return MathJax.typesetPromise([el]); })
+      .catch(function (e) { console.warn(e); });
+  }
+  document.addEventListener("langchange", render);
+  render();
+</script>
+</body>
+</html>

@@ -1,0 +1,211 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "What happens in a run",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "diagrams/run.en.html",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "Programs and steps"
+        },
+        "database": {
+          "label": "Files and folders"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "prepare",
+      "label": "One-time setup"
+    },
+    {
+      "id": "generate",
+      "label": "Generate & build (per grid)"
+    },
+    {
+      "id": "simulate",
+      "label": "Simulate"
+    },
+    {
+      "id": "verify",
+      "label": "Check one run"
+    },
+    {
+      "id": "analyse",
+      "label": "Convergence"
+    }
+  ],
+  "mainPath": [
+    "script",
+    "cpp",
+    "compile",
+    "exe",
+    "run",
+    "raw",
+    "check",
+    "data"
+  ],
+  "nodes": [
+    {
+      "id": "libs",
+      "lane": "prepare",
+      "col": 2,
+      "type": "database",
+      "label": "build/ static libraries",
+      "sublabel": "cmake builds the framework"
+    },
+    {
+      "id": "script",
+      "lane": "generate",
+      "col": 0,
+      "type": "backend",
+      "label": "gauge-wave.py",
+      "sublabel": "--points 9 / 27 / 81"
+    },
+    {
+      "id": "cpp",
+      "lane": "generate",
+      "col": 1,
+      "type": "database",
+      "label": "code/ generated C++",
+      "sublabel": "emptied before each generation"
+    },
+    {
+      "id": "compile",
+      "lane": "generate",
+      "col": 2,
+      "type": "backend",
+      "label": "Compile & link",
+      "sublabel": "src/ headers + build/ libraries"
+    },
+    {
+      "id": "exe",
+      "lane": "generate",
+      "col": 3,
+      "type": "backend",
+      "label": "code/gauge-wave",
+      "sublabel": "the executable"
+    },
+    {
+      "id": "run",
+      "lane": "simulate",
+      "col": 3,
+      "type": "backend",
+      "label": "./gauge-wave",
+      "sublabel": "FD4 + RK4 · up to t = 1"
+    },
+    {
+      "id": "raw",
+      "lane": "simulate",
+      "col": 4,
+      "type": "database",
+      "label": "raw_data/n27/",
+      "sublabel": "snapshots + run.log"
+    },
+    {
+      "id": "check",
+      "lane": "verify",
+      "col": 4,
+      "type": "backend",
+      "label": "analysis/check.py",
+      "sublabel": "--points 27 · vs exact solution"
+    },
+    {
+      "id": "data",
+      "lane": "verify",
+      "col": 5,
+      "type": "database",
+      "label": "data/n27/",
+      "sublabel": "CSV + two plots"
+    },
+    {
+      "id": "conv",
+      "lane": "analyse",
+      "col": 4,
+      "type": "backend",
+      "label": "analysis/convergence.py",
+      "sublabel": "9 / 27 / 81 together"
+    },
+    {
+      "id": "convdata",
+      "lane": "analyse",
+      "col": 5,
+      "type": "database",
+      "label": "data/convergence/",
+      "sublabel": "order + three plots"
+    }
+  ],
+  "edges": [
+    {
+      "from": "script",
+      "to": "cpp"
+    },
+    {
+      "from": "cpp",
+      "to": "compile"
+    },
+    {
+      "from": "libs",
+      "to": "compile",
+      "label": "link"
+    },
+    {
+      "from": "compile",
+      "to": "exe"
+    },
+    {
+      "from": "exe",
+      "to": "run"
+    },
+    {
+      "from": "run",
+      "to": "raw"
+    },
+    {
+      "from": "raw",
+      "to": "check"
+    },
+    {
+      "from": "check",
+      "to": "data"
+    },
+    {
+      "from": "raw",
+      "to": "conv",
+      "label": "all grids"
+    },
+    {
+      "from": "conv",
+      "to": "convdata"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Build the framework first",
+      "items": [
+        "cmake -S . -B build && cmake --build build -j puts the framework libraries in build/.",
+        "Then run gauge-wave.py --points N --run once per grid."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Where generated files go",
+      "items": [
+        "code/, raw_data/ and data/ go to $GAUGE_WAVE_WORK_DIR, or to example/ (listed in .gitignore) if it is not set.",
+        "code/ is shared by all grids; raw_data/ and data/ have one folder per grid."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Convergence",
+      "items": [
+        "FD4 + RK4 errors should fall like h⁴: refining the grid by 3 divides the error by 81."
+      ]
+    }
+  ]
+}

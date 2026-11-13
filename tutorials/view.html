@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" class="viewer">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Peano Notebook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script src="i18n.js"></script>
+</head>
+<body>
+<header class="viewer-bar">
+  <div class="left">
+    <a class="back" href="index.html"><span data-lang="zh-CN">← Peano 学习图册</span><span data-lang="en">← Peano Notebook</span></a>
+    <h1 id="v-title"></h1>
+  </div>
+  <div class="lang-switch" role="group" aria-label="Language / 语言"><button type="button" data-lang-btn="en" aria-pressed="true">EN</button><button type="button" data-lang-btn="zh-CN" aria-pressed="false">中文</button></div>
+</header>
+<iframe class="viewer-frame" id="v-frame" title="" hidden></iframe>
+<div class="viewer-plain" id="v-plain" hidden>
+  <div class="plate"><img id="v-img" alt=""></div>
+  <p class="caption" id="v-cap"></p>
+</div>
+<p class="viewer-missing" id="v-missing" hidden></p>
+<script src="site-data.js"></script>
+<script>
+  var MODE = "archify";
+  var SITE_TITLE = {"zh-CN": "Peano 学习图册", "en": "Peano Notebook"};
+  var shown = "";
+
+  function show() {
+    var lang = SiteLang.get();
+    var id = location.hash.replace(/^#/, "") || SITE_DATA.diagrams[0].id;
+    var d = SITE_DATA.diagrams.filter(function (x) { return x.id === id; })[0];
+    var missing = document.getElementById("v-missing");
+    if (!d) {
+      missing.textContent = lang === "en" ? "No diagram called \"" + id + "\"." : "没有名为 “" + id + "” 的流程图。";
+      missing.hidden = false;
+      return;
+    }
+    missing.hidden = true;
+    var title = d.title[lang];
+    document.getElementById("v-title").textContent = title;
+    document.title = title + " · " + SITE_TITLE[lang];
+
+    var key = id + "." + lang;
+    if (key === shown) return;
+    shown = key;
+    if (MODE === "archify") {
+      var frame = document.getElementById("v-frame");
+      frame.title = title;
+      frame.src = "diagrams/" + key + ".html";
+      frame.hidden = false;
+    } else {
+      var img = document.getElementById("v-img");
+      img.src = "diagrams/static/" + key + ".png";
+      img.alt = title;
+      document.getElementById("v-cap").textContent = d.caption[lang];
+      document.getElementById("v-plain").hidden = false;
+    }
+  }
+  document.addEventListener("langchange", show);
+  window.addEventListener("hashchange", show);
+  show();
+</script>
+</body>
+</html>

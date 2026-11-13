@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "跑之前：刚克隆下来",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "diagrams/files-before.zh-CN.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "root",
+      "label": "peano-minimal/",
+      "sublabel": "还没跑过任何步骤"
+    },
+    {
+      "id": "readme",
+      "label": "README.md",
+      "sublabel": "说明和测试方法",
+      "parent": "root"
+    },
+    {
+      "id": "gi",
+      "label": ".gitignore",
+      "sublabel": "列出所有生成的目录",
+      "parent": "root"
+    },
+    {
+      "id": "cmake",
+      "label": "CMakeLists.txt",
+      "sublabel": "第 0 步用",
+      "parent": "root"
+    },
+    {
+      "id": "req",
+      "label": "requirements.txt",
+      "sublabel": "Python 依赖",
+      "parent": "root"
+    },
+    {
+      "id": "lic",
+      "label": "LICENSE",
+      "sublabel": "Peano 许可证",
+      "parent": "root"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "框架源码",
+      "parent": "root"
+    },
+    {
+      "id": "peano",
+      "label": "peano4/",
+      "sublabel": "网格、代码生成",
+      "parent": "src"
+    },
+    {
+      "id": "tarch",
+      "label": "tarch/",
+      "sublabel": "日志、计时",
+      "parent": "src"
+    },
+    {
+      "id": "toolbox",
+      "label": "toolbox/",
+      "sublabel": "patch、负载均衡",
+      "parent": "src"
+    },
+    {
+      "id": "exa",
+      "label": "exahype2/",
+      "sublabel": "PDE 框架",
+      "parent": "src"
+    },
+    {
+      "id": "gr",
+      "label": "exagrype/",
+      "sublabel": "CCZ4、gauge wave",
+      "parent": "src"
+    },
+    {
+      "id": "dast",
+      "label": "dastgen2/",
+      "sublabel": "数据结构生成",
+      "parent": "src"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "算例",
+      "parent": "root"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "第 1a、1b、2 步",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "第 3 步：处理数据",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "检查一次运行",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "三种网格的收敛阶",
+      "parent": "analysis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "只有源码和脚本",
+      "items": [
+        "框架源码 src/、你写的 gauge-wave.py 和 analysis/。",
+        "还没有 build/、code/、raw_data/、data/。"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "接下来",
+      "items": [
+        "第 0 步生成 build/；gauge-wave.py 生成 code/ 和 raw_data/；analysis/ 生成 data/。"
+      ]
+    }
+  ]
+}

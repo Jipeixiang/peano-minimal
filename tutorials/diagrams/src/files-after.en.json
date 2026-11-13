@@ -1,0 +1,250 @@
+{
+  "schema_version": 1,
+  "diagram_type": "tree",
+  "meta": {
+    "title": "After running 9, 27 and 81 points",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "diagrams/files-after.en.html"
+  },
+  "layout": {
+    "direction": "right"
+  },
+  "nodes": [
+    {
+      "id": "home",
+      "label": "~/",
+      "sublabel": "home folder (example paths)"
+    },
+    {
+      "id": "pm",
+      "label": "Documents/NR/peano-minimal/",
+      "sublabel": "repository: only build/ is new",
+      "parent": "home"
+    },
+    {
+      "id": "others",
+      "label": "README.md and 4 more files",
+      "sublabel": "unchanged",
+      "parent": "pm"
+    },
+    {
+      "id": "src",
+      "label": "src/",
+      "sublabel": "unchanged",
+      "parent": "pm"
+    },
+    {
+      "id": "build",
+      "label": "build/",
+      "sublabel": "step 0 · generated",
+      "parent": "pm"
+    },
+    {
+      "id": "libs",
+      "label": "lib*.a",
+      "sublabel": "6 framework static libraries",
+      "parent": "build"
+    },
+    {
+      "id": "targets",
+      "label": "PeanoTargets.cmake",
+      "sublabel": "tells code/ where the libraries are",
+      "parent": "build"
+    },
+    {
+      "id": "example",
+      "label": "example/",
+      "sublabel": "only your scripts",
+      "parent": "pm"
+    },
+    {
+      "id": "gauge",
+      "label": "gauge-wave.py",
+      "sublabel": "unchanged",
+      "parent": "example"
+    },
+    {
+      "id": "analysis",
+      "label": "analysis/",
+      "sublabel": "unchanged",
+      "parent": "example"
+    },
+    {
+      "id": "check",
+      "label": "check.py",
+      "sublabel": "unchanged",
+      "parent": "analysis"
+    },
+    {
+      "id": "conv",
+      "label": "convergence.py",
+      "sublabel": "unchanged",
+      "parent": "analysis"
+    },
+    {
+      "id": "wd",
+      "label": "sims/gauge-wave/",
+      "sublabel": "$GAUGE_WAVE_WORK_DIR · created at step 1a",
+      "parent": "home"
+    },
+    {
+      "id": "code",
+      "label": "code/",
+      "sublabel": "1a + 1b · generated · only the last run (81 points)",
+      "parent": "wd"
+    },
+    {
+      "id": "cpp",
+      "label": "*.cpp  *.h",
+      "sublabel": "generated C++ sources and headers",
+      "parent": "code"
+    },
+    {
+      "id": "subdirs",
+      "label": "kernels/  observers/  …",
+      "sublabel": "generated C++, by topic",
+      "parent": "code"
+    },
+    {
+      "id": "cbuild",
+      "label": "build.gauge-wave/",
+      "sublabel": "CMake files and .o files",
+      "parent": "code"
+    },
+    {
+      "id": "exe",
+      "label": "gauge-wave",
+      "sublabel": "the executable",
+      "parent": "code"
+    },
+    {
+      "id": "log",
+      "label": "log.md",
+      "sublabel": "generator log",
+      "parent": "code"
+    },
+    {
+      "id": "raw",
+      "label": "raw_data/",
+      "sublabel": "step 2 · generated",
+      "parent": "wd"
+    },
+    {
+      "id": "r9",
+      "label": "n9/",
+      "sublabel": "3.8 MB, same layout as n27",
+      "parent": "raw"
+    },
+    {
+      "id": "r27",
+      "label": "n27/",
+      "sublabel": "98 MB",
+      "parent": "raw"
+    },
+    {
+      "id": "idx",
+      "label": "solution-CCZ4.peano-patch-file",
+      "sublabel": "snapshot index",
+      "parent": "r27"
+    },
+    {
+      "id": "snaps",
+      "label": "solution-CCZ4-0 … -10",
+      "sublabel": "11 snapshots, t = 0 … 1",
+      "parent": "r27"
+    },
+    {
+      "id": "runlog",
+      "label": "run.log",
+      "sublabel": "screen output",
+      "parent": "r27"
+    },
+    {
+      "id": "r81",
+      "label": "n81/",
+      "sublabel": "2.7 GB, same layout as n27",
+      "parent": "raw"
+    },
+    {
+      "id": "data",
+      "label": "data/",
+      "sublabel": "step 3 · generated",
+      "parent": "wd"
+    },
+    {
+      "id": "d9",
+      "label": "n9/",
+      "sublabel": "same layout as n27",
+      "parent": "data"
+    },
+    {
+      "id": "d27",
+      "label": "n27/",
+      "sublabel": "results of check.py",
+      "parent": "data"
+    },
+    {
+      "id": "csv",
+      "label": "*.csv",
+      "sublabel": "3 CSV files",
+      "parent": "d27"
+    },
+    {
+      "id": "png",
+      "label": "*.png",
+      "sublabel": "2 plots",
+      "parent": "d27"
+    },
+    {
+      "id": "d81",
+      "label": "n81/",
+      "sublabel": "same layout as n27",
+      "parent": "data"
+    },
+    {
+      "id": "dc",
+      "label": "convergence/",
+      "sublabel": "results of convergence.py",
+      "parent": "data"
+    },
+    {
+      "id": "dccsv",
+      "label": "convergence.csv",
+      "sublabel": "errors and order",
+      "parent": "dc"
+    },
+    {
+      "id": "dcpng",
+      "label": "*.png",
+      "sublabel": "3 plots",
+      "parent": "dc"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Generated files in two places",
+      "items": [
+        "build/ (step 0) stays in the repository and is shared by every simulation.",
+        "code/, raw_data/ and data/ belong to this one set-up and go to $GAUGE_WAVE_WORK_DIR.",
+        "Without the variable these three folders appear inside example/, with the same structure."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "One folder per grid",
+      "items": [
+        "raw_data/ and data/ have one folder per grid: n9/, n27/, n81/, so runs never overwrite each other.",
+        "code/ is shared by all grids and keeps only the last generated program."
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "Back to before the runs",
+      "items": [
+        "rm -rf \"$GAUGE_WAVE_WORK_DIR\", then rm -rf build inside peano-minimal."
+      ]
+    }
+  ]
+}

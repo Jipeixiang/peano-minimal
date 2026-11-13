@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Peano Notebook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="site.css">
+<script src="i18n.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <div class="topbar"><p class="eyebrow" style="margin:0">Peano · ExaHyPE 2 · ExaGRyPE</p><div class="lang-switch" role="group" aria-label="Language / 语言"><button type="button" data-lang-btn="en" aria-pressed="true">EN</button><button type="button" data-lang-btn="zh-CN" aria-pressed="false">中文</button></div></div>
+  <h1><span data-lang="zh-CN">Peano 学习图册</span><span data-lang="en">Peano Notebook</span></h1>
+  <p class="lede" data-lang="zh-CN">学习 Peano 框架时写的教程和画的流程图。例子都是 CCZ4 gauge wave：FD4 空间离散，RK4 时间积分，周期边界。</p><p class="lede" data-lang="en">Tutorials and diagrams made while learning the Peano framework. The running example is the CCZ4 gauge wave: FD4 in space, RK4 in time, periodic boundaries.</p>
+  <section class="group" aria-labelledby="g-tutorials">
+    <h2 id="g-tutorials"><span data-lang="zh-CN">教程</span><span data-lang="en">Tutorials</span></h2>
+    <ul class="entries">
+      <li><a class="entry" href="tutorial-gauge-wave-pipeline.html"><span class="entry-title"><span data-lang="zh-CN">从 Python 脚本到模拟结果</span><span data-lang="en">From a Python script to simulation results</span></span><span class="entry-meta">2026-11-12</span><span class="entry-desc"><span data-lang="zh-CN">gauge wave 的四个步骤分别在做什么，.o、.a 和链接，出错去哪找，文件怎么组织。用乐高 42100 挖掘机做类比。</span><span data-lang="en">What each of the four gauge wave steps does, .o and .a files and linking, where to look when something fails, and how to organise files, explained with LEGO set 42100.</span><span class="entry-src">peano · exagrype</span></span></a></li>
+      <li><a class="entry" href="tutorial-convergence-study.html"><span class="entry-title"><span data-lang="zh-CN">收敛性分析：9、27、81 三种网格</span><span data-lang="en">Convergence study on 9, 27 and 81 points</span></span><span class="entry-meta">2026-11-12</span><span class="entry-desc"><span data-lang="zh-CN">同一份代码跑三种网格，实测收敛阶 3.92 → 3.99。网格怎么来、哪些步骤要重跑哪些不用、要花多少时间、怎么量误差、怎么看图。</span><span data-lang="en">The same code on three grids, observed order 3.92 → 3.99: where the grids come from, which steps to rerun and which not, what it costs, how the error is measured and how to read the plots.</span><span class="entry-src">peano-minimal</span></span></a></li>
+    </ul>
+  </section>
+  <section class="group" aria-labelledby="g-diagrams">
+    <h2 id="g-diagrams"><span data-lang="zh-CN">流程图</span><span data-lang="en">Diagrams</span></h2>
+    <ul class="entries">
+      <li><a class="entry" href="view.html#run"><span class="entry-title"><span data-lang="zh-CN">运行流程</span><span data-lang="en">What happens in a run</span></span><span class="entry-meta">2026-11-12</span><span class="entry-desc"><span data-lang="zh-CN">从编译框架库，到按网格生成、编译、运行，再到单次检查和 9 / 27 / 81 收敛分析。</span><span data-lang="en">From building the framework to generating, building and running each grid, checking one run, and the 9 / 27 / 81 convergence study.</span><span class="entry-src">peano-minimal</span></span></a></li>
+      <li><a class="entry" href="view.html#layout"><span class="entry-title"><span data-lang="zh-CN">仓库结构</span><span data-lang="en">Repository layout</span></span><span class="entry-meta">2026-11-12</span><span class="entry-desc"><span data-lang="zh-CN">peano-minimal 的完整目录树：自己写的脚本（gauge-wave.py、analysis/）和生成的目录（build/、code/、raw_data/、data/）。</span><span data-lang="en">The full folder tree of peano-minimal: the scripts you write (gauge-wave.py, analysis/) and the generated folders (build/, code/, raw_data/, data/).</span><span class="entry-src">peano-minimal</span></span></a></li>
+      <li><a class="entry" href="view.html#files-before"><span class="entry-title"><span data-lang="zh-CN">文件结构：跑之前</span><span data-lang="en">Files before running</span></span><span class="entry-meta">2026-11-12</span><span class="entry-desc"><span data-lang="zh-CN">刚从 GitHub 克隆下来、一步都还没跑时的 peano-minimal：只有框架源码和自己写的脚本。</span><span data-lang="en">peano-minimal fresh from GitHub, before any step has run: only the framework source and your scripts.</span><span class="entry-src">peano-minimal</span></span></a></li>
+      <li><a class="entry" href="view.html#files-after"><span class="entry-title"><span data-lang="zh-CN">文件结构：跑完三组以后</span><span data-lang="en">Files after three runs</span></span><span class="entry-meta">2026-11-13</span><span class="entry-desc"><span data-lang="zh-CN">跑完 9、27、81 三组模拟和分析以后：仓库里多了 build/，工作目录 $GAUGE_WAVE_WORK_DIR 里有 code/、raw_data/、data/。</span><span data-lang="en">After the 9-, 27- and 81-point runs and the analysis: build/ in the repository, and code/, raw_data/, data/ in the work folder $GAUGE_WAVE_WORK_DIR.</span><span class="entry-src">peano-minimal</span></span></a></li>
+    </ul>
+  </section>
+</main>
+<style>.entry-src{margin-left:8px}</style>
+<script>
+  document.addEventListener('langchange', function (e) {
+    document.title = {"zh-CN": "Peano 学习图册", "en": "Peano Notebook"}[e.detail];
+  });
+</script>
+</body>
+</html>
