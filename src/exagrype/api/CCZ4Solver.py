@@ -18,12 +18,12 @@ class CCZ4Solver(exahype2.api.Solver):
 
     Solver for the Einstein equations in the first-order CCZ4 formulation
 
-    The solver is a plain exahype2.api.Solver with the 59 CCZ4 unknowns and
+    The solver is a plain exahype2.api.Solver with the 58 CCZ4 unknowns and
     the PDE terms of CCZ4 pre-registered. All terms delegate to the
     ExaGRyPE library (configure Peano with --enable-exagrype):
 
-    - the non-conservative product to exagrype::ccz4::ncp(),
-    - the volumetric source to exagrype::ccz4::source(),
+    - the non-conservative product to exagrype::ccz4::ncpFirstOrder(),
+    - the volumetric source to exagrype::ccz4::sourceFirstOrder(),
     - the maximum eigenvalue to exagrype::ccz4::maxEigenvalue(),
     - the initial condition to one of the routines from
       exagrype::initialvalues, @see exagrype.api.initialvalues.
@@ -46,10 +46,10 @@ class CCZ4Solver(exahype2.api.Solver):
       (exagrype::ccz4::enforceCCZ4constraints()) only if you switch it on
       via enforce_ccz4_constraint(). Without it, long runs drift away from
       the constraint surface.
-    - exagrype::ccz4::ncp() omits the advection terms
+    - exagrype::ccz4::ncpFirstOrder() omits the advection terms
       @f$ \\beta^k \\partial _k Q @f$ of all unknowns besides the metric,
       the lapse, the shift and phi (whose advection is part of the
-      algebraic source) and K0. It expects the numerical scheme to add them
+      algebraic source). It expects the numerical scheme to add them
       with lopsided stencils. The fourth-order Finite Differences do so if
       you select the kernel CentralDifferencesWithLopsidedAdvection with
       ADVECTION_VELOCITY and lopsided_advection_quantities(). The Finite
@@ -82,6 +82,9 @@ class CCZ4Solver(exahype2.api.Solver):
         OnlyFinalSolution = 1
         IntermediateSteps = 2
 
+    NUMBER_OF_CCZ4_ENTRIES = 58
+    """! Number of entries which the kernels in exagrype::ccz4 work on """
+
     Unknowns = {
         "G": 6,
         "K": 6,
@@ -90,6 +93,8 @@ class CCZ4Solver(exahype2.api.Solver):
         "lapse": 1,
         "shift": 3,
         "b": 3,
+        "Kex": 1,
+        "phi": 1,
         "dLapse": 3,
         "dxShift": 3,
         "dyShift": 3,
@@ -97,29 +102,25 @@ class CCZ4Solver(exahype2.api.Solver):
         "dxG": 6,
         "dyG": 6,
         "dzG": 6,
-        "traceK": 1,
-        "phi": 1,
         "P": 3,
-        "K0": 1,
     }
     """!
 
-    The unknowns of the first-order CCZ4 formulation in the order the
-    kernels in exagrype::ccz4 expect them. The names match the legacy
-    ExaGRyPE solvers.
+    The 58 unknowns of the first-order CCZ4 formulation in the order the
+    kernels in exagrype::ccz4 expect them: 25 primary entries (up to phi)
+    followed by the 33 first derivatives. Kex is the trace of the extrinsic
+    curvature, whereas K holds the six entries of the trace-free conformal
+    extrinsic curvature.
 
     """
 
     DefaultParameters = {
         "CCZ4LapseType": 0,
-        "CCZ4SO": 0,
-        "CCZ4ds": 1.0,
         "CCZ4c": 1.0,
         "CCZ4e": 1.0,
         "CCZ4f": 0.75,
-        "CCZ4bs": 0.0,
-        "CCZ4sk": 0.0,
-        "CCZ4xi": 1.0,
+        "CCZ4b": 1,
+        "CCZ4s": 0,
         "CCZ4itau": 1.0,
         "CCZ4eta": 1.0,
         "CCZ4k1": 0.1,
@@ -132,8 +133,35 @@ class CCZ4Solver(exahype2.api.Solver):
     """!
 
     Default values of the CCZ4 parameters, taken from the legacy ExaGRyPE
-    solvers. Integer values become int constants of the generated solver
-    class, all others double constants.
+    gauge wave setup: harmonic slicing (CCZ4LapseType=0) and a shift which
+    does not evolve (CCZ4s=0). The legacy black hole runs use 1+log slicing
+    (CCZ4LapseType=1) and the Gamma driver (CCZ4s=1) in its shifting shift
+    variant (CCZ4b=1, which only matters once the shift evolves). Integer
+    values become int constants of the generated solver class, all others
+    double constants.
+
+    The integer parameters are switches:
+
+    - CCZ4LapseType: 0 for harmonic slicing, 1 for 1+log slicing.
+    - CCZ4b: variant of the Gamma driver, if the shift evolves. 1 is the
+      shifting shift, i.e. the equations of the shift, of b and of the
+      derivatives of the shift hold their advection terms. 0 is the
+      non-shifting shift without these terms
+      (exagrype::ccz4::ncpFirstOrder()).
+    - CCZ4s: 1 evolves the shift (Gamma driver), 0 freezes it.
+
+    Upstream ExaGRyPE writes down why there are 58 entries, why the
+    switches are integers and why there are no parameters CCZ4ds and
+    CCZ4xi in src/exagrype/ccz4/adrs/0001-ccz4-has-58-entries-and-integer-switches.md,
+    and the two variants of the Gamma driver in
+    src/exagrype/ccz4/adrs/0002-ccz4b-selects-the-shifting-or-the-non-shifting-shift.md.
+
+    """
+
+    Switches = ("CCZ4LapseType", "CCZ4b", "CCZ4s")
+    """!
+
+    The integer parameters which accept 0 and 1 only.
 
     """
 
@@ -161,7 +189,8 @@ class CCZ4Solver(exahype2.api.Solver):
         @param parameters: Dict[str, Union[int, float]]
           CCZ4 parameters that differ from DefaultParameters, e.g.
           {"CCZ4k1": 0.0}. Keys which are not in DefaultParameters are
-          rejected, as they most likely are typos.
+          rejected, as they most likely are typos. The switches (@see
+          Switches) have to be the integers 0 or 1.
 
         @param initial_condition: exahype2.api.InitPointWisely
           Initial condition. Defaults to exagrype.api.initialvalues.gauge_wave().
@@ -179,6 +208,15 @@ class CCZ4Solver(exahype2.api.Solver):
                 raise KeyError(
                     f"Solver {name}: unknown CCZ4 parameter {key!r}. "
                     f"Available parameters are {list(self.DefaultParameters)}."
+                )
+            if key in self.Switches and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value not in (0, 1)
+            ):
+                raise TypeError(
+                    f"Solver {name}: CCZ4 parameter {key!r} is an integer "
+                    f"switch, i.e. has to be 0 or 1, but got {value!r}"
                 )
             self._parameters[key] = value
 
@@ -223,9 +261,9 @@ class CCZ4Solver(exahype2.api.Solver):
     def lopsided_advection_quantities(self) -> List[str]:
         """!
 
-        The unknowns whose advection terms exagrype::ccz4::ncp() omits
+        The unknowns whose advection terms exagrype::ccz4::ncpFirstOrder() omits
 
-        exagrype::ccz4::ncp() is invoked with its advection switched off.
+        exagrype::ccz4::ncpFirstOrder() is invoked with its advection switched off.
         The unknowns returned are those whose advection terms
         @f$ \\beta^k \\partial _k Q @f$ hence have to be added by the
         numerical scheme, e.g. via
@@ -240,29 +278,30 @@ class CCZ4Solver(exahype2.api.Solver):
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         These are all unknowns besides the conformal metric G, the lapse,
-        the shift, phi and K0: The advection terms of the metric, the lapse,
+        the shift and phi: The advection terms of the metric, the lapse,
         the shift and phi are part of the algebraic source
-        (exagrype::ccz4::source()), which expresses them through the
-        auxiliary unknowns, i.e. the first derivatives. K0 does not evolve.
+        (exagrype::ccz4::sourceFirstOrder()), which expresses them through
+        the auxiliary unknowns, i.e. the first derivatives.
 
         The advection of b and of the derivatives of the shift (dxShift,
-        dyShift, dzShift) is scaled with CCZ4bs and CCZ4sk. If either of
-        them is zero, the routine leaves these unknowns out.
+        dyShift, dzShift) belongs to the shifting shift only, i.e. the
+        routine leaves these unknowns out unless CCZ4s=1 and CCZ4b=1.
 
-        The equation of b couples the advection of b and of Ghat (the
-        unknown Z): Its
-        advection terms are CCZ4sk * (CCZ4xi * beta^k d_k Ghat + CCZ4bs *
-        (beta^k d_k b - beta^k d_k Ghat)). A kernel which advects each
-        quantity on its own, i.e. adds beta^k d_k b to b, reproduces this
-        only for CCZ4xi=1, CCZ4bs=1 and CCZ4sk=1. This is the case for the
-        default CCZ4xi and the moving puncture setups with CCZ4bs=CCZ4sk=1.
+        The equation of b holds the time derivative of Ghat (the unknown
+        Z), which comprises the advection of Ghat. The shifting shift
+        subtracts this advection again, i.e. only the advection of b itself
+        is left, which the numerical scheme adds as for any other unknown.
+        The non-shifting shift (CCZ4b=0) keeps the advection of Ghat in the
+        equation of b. A scheme which advects each quantity on its own
+        cannot add it there, so exagrype::ccz4::ncpFirstOrder() does so
+        with the derivatives it is given.
 
         @return List[str]
           Names of unknowns, @see Unknowns.
 
         """
-        excluded = {"G", "lapse", "shift", "phi", "K0"}
-        if self._parameters["CCZ4bs"] == 0 or self._parameters["CCZ4sk"] == 0:
+        excluded = {"G", "lapse", "shift", "phi"}
+        if self._parameters["CCZ4b"] == 0 or self._parameters["CCZ4s"] == 0:
             excluded |= {"b", "dxShift", "dyShift", "dzShift"}
         return [name for name in self.Unknowns if name not in excluded]
 
@@ -456,32 +495,34 @@ class CCZ4Solver(exahype2.api.Solver):
 
         The Finite Volume kernels hand over the jump deltaQ along one normal,
         the fourth-order Finite Differences of exahype2.api.rkfd4 the
-        derivative along one normal times the mesh width,
-        whereas exagrype::ccz4::ncp() expects the gradient along all three
-        directions. We hence embed the jump into an otherwise empty gradient.
+        derivative along one normal times the mesh width. This is what
+        exagrype::ccz4::ncpFirstOrder() expects. The kernel takes the 25
+        primary and the 33 secondary entries as two pointers, which follow
+        each other here.
 
         """
         return """
-  double deltaQSerialised[NumberOfUnknowns * 3];
-  for (int i = 0; i < NumberOfUnknowns; i++) {
-    deltaQSerialised[i + 0 * NumberOfUnknowns] = 0.0;
-    deltaQSerialised[i + 1 * NumberOfUnknowns] = 0.0;
-    deltaQSerialised[i + 2 * NumberOfUnknowns] = 0.0;
-
-    deltaQSerialised[i + normal * NumberOfUnknowns] = deltaQ[i];
-  }
-  ::exagrype::ccz4::ncp(BTimesDeltaQ, Q, deltaQSerialised, normal, CCZ4LapseType, CCZ4ds, CCZ4c, CCZ4e, CCZ4f, CCZ4bs, CCZ4sk, CCZ4xi, CCZ4mu, CCZ4SO);
+  ::exagrype::ccz4::ncpFirstOrder(
+    BTimesDeltaQ, BTimesDeltaQ + 25,
+    Q, Q + 25,
+    deltaQ, deltaQ + 25,
+    normal, CCZ4LapseType, CCZ4c, CCZ4e, CCZ4f, CCZ4b, CCZ4s, CCZ4mu
+  );
 """
 
     @staticmethod
     def _source_implementation() -> str:
         return """
   tarch::memset(S, 0, NumberOfUnknowns * sizeof(double));
-  ::exagrype::ccz4::source(S, Q, CCZ4LapseType, CCZ4ds, CCZ4c, CCZ4e, CCZ4f, CCZ4bs, CCZ4sk, CCZ4xi, CCZ4itau, CCZ4eta, CCZ4k1, CCZ4k2, CCZ4k3, CCZ4SO);
+  ::exagrype::ccz4::sourceFirstOrder(
+    S, S + 25,
+    Q, Q + 25,
+    CCZ4LapseType, CCZ4c, CCZ4e, CCZ4f, CCZ4b, CCZ4s, CCZ4itau, CCZ4eta, CCZ4k1, CCZ4k2, CCZ4k3
+  );
 """
 
     @staticmethod
     def _max_eigenvalue_implementation() -> str:
         return """
-  ::exagrype::ccz4::maxEigenvalue(Q, normal, CCZ4e, CCZ4ds, CCZ4GLMc, CCZ4GLMd, lambdaMax);
+  ::exagrype::ccz4::maxEigenvalue(Q, normal, CCZ4e, CCZ4GLMc, CCZ4GLMd, lambdaMax);
 """

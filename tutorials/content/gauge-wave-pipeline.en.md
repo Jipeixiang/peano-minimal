@@ -64,11 +64,11 @@ peano4_project.generate()
 
 ### Why not write the C++ directly?
 
-Peano's design is to **bake the specifics of your problem into the C++ code before it is compiled.** For example, 59 unknowns, 9×9×9 patches and a halo of 3 layers all become constants, so the compiler can optimise for them: unroll loops, size arrays at compile time.
+Peano's design is to **bake the specifics of your problem into the C++ code before it is compiled.** For example, 58 unknowns, 9×9×9 patches and a halo of 3 layers all become constants, so the compiler can optimise for them: unroll loops, size arrays at compile time.
 
 So Python acts as a **configuration language and code generator**. In `gauge-wave.py` you describe *what* you want (CCZ4, FD4, RK4, periodic boundaries, resolution, end time), and it writes the C++ that does it.
 
-Analogy: `gauge-wave.py` is the **brief** handed to the LEGO designer: "a Liebherr R 9800 that can slew, dig and drive". The parameters (59 unknowns, 9×9×9 patches, RK4) are the scale and options in the brief. The designer fixes every dimension in the instructions (a 15-hole beam here, a 3-long pin there), so whoever builds it never has to measure. The compiler is in the same position: when every size is a known constant, it can plan the work in advance.
+Analogy: `gauge-wave.py` is the **brief** handed to the LEGO designer: "a Liebherr R 9800 that can slew, dig and drive". The parameters (58 unknowns, 9×9×9 patches, RK4) are the scale and options in the brief. The designer fixes every dimension in the instructions (a 15-hole beam here, a 3-long pin there), so whoever builds it never has to measure. The compiler is in the same position: when every size is a known constant, it can plan the work in advance.
 
 ![The brief goes to the designer, who draws a booklet with every size fixed](content/img/lego/brief.en.svg)
 

@@ -83,11 +83,11 @@ peano4_project.generate()
 
 ### 为什么要多这一步，不直接写 C++？
 
-Peano 的设计思路是：**把问题的具体参数在编译前就写死进 C++ 代码。** 比如未知量有 59 个、patch 是 9×9×9、halo 宽 3 层，这些都写成常数，编译器就能针对它们优化，比如展开循环、在编译期确定数组大小。
+Peano 的设计思路是：**把问题的具体参数在编译前就写死进 C++ 代码。** 比如未知量有 58 个、patch 是 9×9×9、halo 宽 3 层，这些都写成常数，编译器就能针对它们优化，比如展开循环、在编译期确定数组大小。
 
 所以 Python 在这里扮演的是**配置语言加代码生成器**：你在 `gauge-wave.py` 里描述"要什么"（CCZ4 方程、FD4 格式、RK4、周期边界、分辨率、结束时间），它替你写出"怎么做"的 C++。
 
-类比：`gauge-wave.py` 是交给乐高设计师的**需求单**："做一台 Liebherr R 9800，要能回转、能挖、能走"。参数（59 个未知量、9×9×9 的 patch、RK4）就是需求单上的比例和配置。设计师把每个尺寸都在说明书里定死，比如这里用 15 孔的梁、那里用 3 单位的销，拼的人就不用现场量。编译器也是这样：尺寸都是已知常数，它就能提前把活安排好。
+类比：`gauge-wave.py` 是交给乐高设计师的**需求单**："做一台 Liebherr R 9800，要能回转、能挖、能走"。参数（58 个未知量、9×9×9 的 patch、RK4）就是需求单上的比例和配置。设计师把每个尺寸都在说明书里定死，比如这里用 15 孔的梁、那里用 3 单位的销，拼的人就不用现场量。编译器也是这样：尺寸都是已知常数，它就能提前把活安排好。
 
 ![需求单交给设计师，画出尺寸全部定死的说明书](content/img/lego/brief.zh-CN.svg)
 
@@ -434,11 +434,11 @@ peano4_project.generate()
 
 ### Why not write the C++ directly?
 
-Peano's design is to **bake the specifics of your problem into the C++ code before it is compiled.** For example, 59 unknowns, 9×9×9 patches and a halo of 3 layers all become constants, so the compiler can optimise for them: unroll loops, size arrays at compile time.
+Peano's design is to **bake the specifics of your problem into the C++ code before it is compiled.** For example, 58 unknowns, 9×9×9 patches and a halo of 3 layers all become constants, so the compiler can optimise for them: unroll loops, size arrays at compile time.
 
 So Python acts as a **configuration language and code generator**. In `gauge-wave.py` you describe *what* you want (CCZ4, FD4, RK4, periodic boundaries, resolution, end time), and it writes the C++ that does it.
 
-Analogy: `gauge-wave.py` is the **brief** handed to the LEGO designer: "a Liebherr R 9800 that can slew, dig and drive". The parameters (59 unknowns, 9×9×9 patches, RK4) are the scale and options in the brief. The designer fixes every dimension in the instructions (a 15-hole beam here, a 3-long pin there), so whoever builds it never has to measure. The compiler is in the same position: when every size is a known constant, it can plan the work in advance.
+Analogy: `gauge-wave.py` is the **brief** handed to the LEGO designer: "a Liebherr R 9800 that can slew, dig and drive". The parameters (58 unknowns, 9×9×9 patches, RK4) are the scale and options in the brief. The designer fixes every dimension in the instructions (a 15-hole beam here, a 3-long pin there), so whoever builds it never has to measure. The compiler is in the same position: when every size is a known constant, it can plan the work in advance.
 
 ![The brief goes to the designer, who draws a booklet with every size fixed](content/img/lego/brief.en.svg)
 
